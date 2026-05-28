@@ -38,6 +38,10 @@ ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.3
 
 `uv.lock` pins to a commit SHA — `uv sync --frozen` is reproducible in CI.
 
+Prefer a pre-built wheel (no source build at install time)? Pin the wheel
+asset from the GitHub Release — see the
+[install guide](https://docs.ocx.sh/sdk/mirror/getting-started/install/#pre-built-wheel-alternative).
+
 ## Quickstart
 
 ```python

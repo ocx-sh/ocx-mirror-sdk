@@ -1,6 +1,10 @@
 # Install
 
-Pre-1.0: no PyPI publishing yet. Pin to a git tag.
+Pre-1.0: no PyPI publishing yet. Two install paths, both reproducible:
+
+- **Git tag** (primary) — concise URL, source build at install time.
+- **Pre-built wheel** (alternative) — skip the build step by pinning the wheel
+  attached to the GitHub Release.
 
 ## PEP 723 (recommended for one-file generators)
 
@@ -37,6 +41,34 @@ ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.3
 ```
 
 `uv.lock` pins the tag to a commit SHA — `uv sync --frozen` is reproducible.
+
+## Pre-built wheel (alternative)
+
+If you want to skip the source build (no `hatchling` at install time), pin
+the wheel asset attached to the GitHub Release. Same reproducibility — `uv.lock`
+hashes the wheel bytes.
+
+PEP 723:
+
+```python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#   "ocx-mirror-sdk @ https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/v0.3.0/ocx_mirror_sdk-0.3.0-py3-none-any.whl",
+# ]
+# ///
+```
+
+`pyproject.toml`:
+
+```toml
+[project]
+dependencies = ["ocx-mirror-sdk"]
+
+[tool.uv.sources]
+ocx-mirror-sdk = { url = "https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/v0.3.0/ocx_mirror_sdk-0.3.0-py3-none-any.whl" }
+```
 
 ## Tag selection
 
