@@ -28,6 +28,7 @@ Issues = "https://github.com/ocx-sh/ocx-mirror-sdk/issues"
 
 [project.optional-dependencies]
 dev = [
+    "coverage>=7.6",
     "datamodel-code-generator>=0.26",
     "jsonschema>=4",
     "pyright>=1.1",
@@ -72,3 +73,28 @@ typeCheckingMode = "standard"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers"]
+
+[tool.coverage.run]
+branch = true
+source = ["ocx_mirror_sdk"]
+relative_files = true
+omit = ["src/ocx_mirror_sdk/_schema.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 80
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(typing\\.)?overload",
+    "class .*\\bProtocol\\):",
+    "(typing\\.)?assert_never",
+    ": \\.{3}",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.html]
+directory = "htmlcov"

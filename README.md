@@ -1,5 +1,8 @@
 # ocx-mirror-sdk
 
+[![CI](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ocx-sh/ocx-mirror-sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/ocx-sh/ocx-mirror-sdk)
+
 Python SDK for authoring [`ocx-mirror`](https://github.com/ocx-sh/ocx) generator scripts.
 
 `ocx-mirror` is OCX's tool for ingesting upstream tool releases (e.g. CPython, Bun, shellcheck) and republishing them as OCI artifacts. When upstream releases live somewhere `ocx-mirror` cannot crawl directly, a small Python *generator* emits a `url_index` JSON document. This SDK provides the typed building blocks for those generators.
@@ -68,6 +71,10 @@ OCX bootstraps `task` and `uv`; `uv` pulls Python linters (`ruff`, `pyright`) fr
 ## Stability
 
 Pre-1.0. Breaking changes ship without migration shims. When the upstream `url_index` schema bumps to `/v2.json`, this SDK ships a new major version.
+
+## Coverage
+
+`task verify` enforces ≥80% line + branch coverage on `src/ocx_mirror_sdk` (generated `_schema.py` excluded). Run `task cov:html` and open `htmlcov/index.html` to inspect uncovered lines locally. The threshold lives in `[tool.coverage.report] fail_under` in `pyproject.toml`.
 
 ## License
 

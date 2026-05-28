@@ -14,12 +14,13 @@ tasks:
       - task: verify
 
   verify:
-    desc: Full quality gate (format check, lint, types, tests)
+    desc: Full quality gate (format check, lint, types, tests, coverage)
     cmds:
       - task: format:check
       - task: lint
       - task: types
       - task: test
+      - task: cov:report
 
   format:
     desc: Apply formatting
@@ -42,9 +43,24 @@ tasks:
       - uv run --extra dev pyright
 
   test:
-    desc: Run pytest suite
+    desc: Run pytest under coverage
     cmds:
-      - uv run --extra dev pytest
+      - uv run --extra dev coverage run -m pytest
+
+  cov:report:
+    desc: Print coverage report (enforces fail_under from pyproject.toml)
+    cmds:
+      - uv run --extra dev coverage report
+
+  cov:xml:
+    desc: Emit coverage.xml for CI upload
+    cmds:
+      - uv run --extra dev coverage xml
+
+  cov:html:
+    desc: Generate HTML coverage report at htmlcov/ for local browsing
+    cmds:
+      - uv run --extra dev coverage html
 
   schema:fetch:
     desc: Fetch the canonical url-index JSON Schema from the website
