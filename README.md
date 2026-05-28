@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ocx-sh/ocx-mirror-sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/ocx-sh/ocx-mirror-sdk)
-[![Docs](https://img.shields.io/badge/docs-docs.ocx.sh-blue)](https://docs.ocx.sh/sdk/mirror/)
+[![Docs](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/docs.yml/badge.svg)](https://docs.ocx.sh/sdk/mirror/)
 
 Python SDK for authoring [`ocx-mirror`](https://github.com/ocx-sh/ocx) generator scripts.
 
