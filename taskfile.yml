@@ -106,3 +106,16 @@ tasks:
     desc: Remove the generated site/ directory
     cmds:
       - rm -rf site
+
+  release:prep:
+    desc: 'Bump SDK version across pyproject + README + docs. Usage: task release:prep VERSION=X.Y.Z'
+    preconditions:
+      - sh: "echo '{{.VERSION}}' | grep -Eq '^[0-9]+\\.[0-9]+\\.[0-9]+$'"
+        msg: 'VERSION must be SemVer X.Y.Z (no leading v). Got: "{{.VERSION}}"'
+    cmds:
+      - sed -i 's/^version = ".*"/version = "{{.VERSION}}"/' pyproject.toml
+      - sed -i -E 's|@v[0-9]+\.[0-9]+\.[0-9]+|@v{{.VERSION}}|g' README.md docs/getting-started/install.md
+      - sed -i -E 's|tag = "v[0-9]+\.[0-9]+\.[0-9]+"|tag = "v{{.VERSION}}"|g' README.md docs/getting-started/install.md
+      - sed -i -E 's|releases/download/v[0-9]+\.[0-9]+\.[0-9]+/ocx_mirror_sdk-[0-9]+\.[0-9]+\.[0-9]+|releases/download/v{{.VERSION}}/ocx_mirror_sdk-{{.VERSION}}|g' README.md docs/getting-started/install.md
+      - sed -i -E 's|tag/v[0-9]+\.[0-9]+\.[0-9]+|tag/v{{.VERSION}}|g' docs/getting-started/install.md
+      - 'echo ">> Now: rename ## Unreleased to ## v{{.VERSION}} — <name> in docs/changelog.md, add date, commit, tag v{{.VERSION}}."'
