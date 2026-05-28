@@ -30,11 +30,24 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # `actions/configure-pages` with `enablement: true` needs `pages: write`
+    # on the build job too (not only the deploy job) so the very first run
+    # can turn Pages on.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           # mkdocs-git-revision-date-localized-plugin needs history
           fetch-depth: 0
+      - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b  # v5.0.0
+        with:
+          # Auto-enable Pages on first run + select GitHub Actions as source.
+          enablement: true
       - uses: ocx-sh/setup-ocx@v1
       - name: Build docs (strict)
         run: ocx run -- task docs:build
