@@ -60,10 +60,15 @@ When the upstream schema bumps to `/v2.json`, ship a new major version of this S
 
 ## Release cadence
 
-- Tag `vX.Y.Z` → GitHub Actions builds wheel + creates GitHub Release.
+- Tag `vX.Y.Z` → `.github/workflows/release.yml` runs `task verify`, `uv build`, and attaches the resulting `*.whl` + `*.tar.gz` to a GitHub Release. `generate_release_notes: true` populates the release body from commits since the previous tag.
+- A coherence guard in the workflow re-checks `${GITHUB_REF_NAME#v}` against the `version =` in `pyproject.toml` and fails fast on drift — a wrong-version tag never produces an artifact.
+- The same workflow accepts `workflow_dispatch` for branch dry runs: build runs, but the GitHub Release upload is skipped and artifacts land in a 1-day `dist-dry-run` retention slot instead.
 - Docs deploy on every push to `main` via `.github/workflows/docs.yml`.
-- No PyPI publishing yet — consumers pin via `git+https://github.com/ocx-sh/ocx-mirror-sdk@vX.Y.Z` (PEP 723 inline metadata or `[tool.uv.sources]`).
-- `uv.lock` on the consumer side resolves the tag to a commit SHA → reproducible installs.
+- No PyPI publishing yet. Consumers pin either:
+  - the git tag: `git+https://github.com/ocx-sh/ocx-mirror-sdk@vX.Y.Z` (PEP 723 inline metadata or `[tool.uv.sources]` `git` form), or
+  - the wheel asset: `https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/vX.Y.Z/ocx_mirror_sdk-X.Y.Z-py3-none-any.whl` (`[tool.uv.sources]` `url` form).
+- `uv.lock` makes both paths reproducible — git tag → commit SHA, wheel URL → byte hash.
+- The release helper `ocx run -- task release:prep VERSION=X.Y.Z` bumps `pyproject.toml`, `README.md`, and `docs/getting-started/install.md` in one shot. `docs/changelog.md` stays human-curated — rename `## Unreleased` to `## vX.Y.Z — <name>` before tagging.
 
 ## Testing
 
