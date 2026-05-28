@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write  # required for softprops/action-gh-release
@@ -17,6 +18,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
+      - name: Verify tag matches pyproject.toml version
+        if: github.ref_type == 'tag'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PYPROJ=$(grep -E '^version = ' pyproject.toml | head -1 | cut -d'"' -f2)
+          if [[ "$TAG" != "$PYPROJ" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pyproject version $PYPROJ"
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME matches pyproject version $PYPROJ."
+
       - uses: ocx-sh/setup-ocx@v1
 
       - name: Verify before release
@@ -26,9 +38,18 @@ jobs:
         run: ocx run -- uv build
 
       - name: Upload artifacts to release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8  # v2.3.2
         with:
           files: |
             dist/*.whl
             dist/*.tar.gz
           generate_release_notes: true
+
+      - name: Upload dist for inspection (dry run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: dist-dry-run
+          path: dist/
+          retention-days: 1
