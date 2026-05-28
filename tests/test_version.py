@@ -11,6 +11,9 @@ so this test guards against the lookup name drifting away from the
 from __future__ import annotations
 
 import re
+from importlib.metadata import PackageNotFoundError
+
+import pytest
 
 import ocx_mirror_sdk
 
@@ -25,3 +28,11 @@ def test_version_is_non_empty_semver_prefix() -> None:
 
 def test_version_exported_in_all() -> None:
     assert "__version__" in ocx_mirror_sdk.__all__
+
+
+def test_resolve_version_falls_back_when_metadata_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise(name: str) -> str:
+        raise PackageNotFoundError(name)
+
+    monkeypatch.setattr(ocx_mirror_sdk, "_pkg_version", _raise)
+    assert ocx_mirror_sdk._resolve_version() == "0.0.0+unknown"
