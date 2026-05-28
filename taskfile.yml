@@ -80,3 +80,29 @@ tasks:
         --output src/ocx_mirror_sdk/_schema.py
         --output-model-type dataclasses.dataclass
         --target-python-version 3.13
+
+  docs:serve:
+    desc: Live-reload MkDocs server at http://127.0.0.1:8000
+    env:
+      DISABLE_MKDOCS_2_WARNING: 'true'
+    cmds:
+      - uv run --extra docs mkdocs serve -a 127.0.0.1:8000
+
+  docs:build:
+    desc: Build the static site into site/ (strict mode)
+    env:
+      DISABLE_MKDOCS_2_WARNING: 'true'
+    cmds:
+      - uv run --extra docs mkdocs build --strict
+    sources:
+      - 'docs/**/*'
+      - 'src/ocx_mirror_sdk/**/*.py'
+      - 'mkdocs.yml'
+      - 'examples/**/*.py'
+    generates:
+      - 'site/**/*'
+
+  docs:clean:
+    desc: Remove the generated site/ directory
+    cmds:
+      - rm -rf site
