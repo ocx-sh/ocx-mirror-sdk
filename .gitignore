@@ -14,6 +14,12 @@ dist/
 # Task runner cache
 .task/
 
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # OCX caches
 .ocx/
 
