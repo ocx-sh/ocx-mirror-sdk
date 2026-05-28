@@ -7,6 +7,9 @@ Top-level imports are the only stable contract. Everything reachable via
 underscored module paths is package-private and may change without notice.
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 from ocx_mirror_sdk.cache import FileCache, configure
 from ocx_mirror_sdk.errors import (
     ApiResponseError,
@@ -23,6 +26,11 @@ from ocx_mirror_sdk.index import IndexBuilder
 from ocx_mirror_sdk.releases import Asset, Release
 from ocx_mirror_sdk.text import extract_urls
 
+try:
+    __version__ = _pkg_version("ocx-mirror-sdk")
+except PackageNotFoundError:  # running from source without `uv sync`
+    __version__ = "0.0.0+unknown"
+
 __all__ = [
     "ApiResponseError",
     "Asset",
@@ -37,6 +45,7 @@ __all__ = [
     "Release",
     "SchemaError",
     "TransportError",
+    "__version__",
     "configure",
     "extract_urls",
     "list_releases",
