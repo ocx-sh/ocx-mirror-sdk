@@ -208,3 +208,54 @@ def test_release_round_trip():
         assets=[Asset(name="f.tar.gz", browser_download_url="https://x/f.tar.gz")],
     )
     assert Release.from_dict(release.to_dict()) == release
+
+
+# ---------------------------------------------------------------------------
+# _login() — patches the imported `github3` per "patch where used"
+# (quality-tests.md §6).
+# ---------------------------------------------------------------------------
+
+
+def test_login_uses_token_when_env_set(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+
+    with patch("ocx_mirror_sdk.github.github3", autospec=True) as mock_gh3:
+        gh = MagicMock()
+        mock_gh3.login.return_value = gh
+
+        from ocx_mirror_sdk.github import _login
+
+        result = _login()
+
+    mock_gh3.login.assert_called_once_with(token="secret-token")
+    mock_gh3.GitHub.assert_not_called()
+    assert result is gh
+    assert gh.session.default_read_timeout == 30
+
+
+def test_login_uses_anonymous_when_no_token(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    with patch("ocx_mirror_sdk.github.github3", autospec=True) as mock_gh3:
+        gh = MagicMock()
+        mock_gh3.GitHub.return_value = gh
+
+        from ocx_mirror_sdk.github import _login
+
+        result = _login()
+
+    mock_gh3.GitHub.assert_called_once_with()
+    mock_gh3.login.assert_not_called()
+    assert result is gh
+
+
+def test_login_raises_when_github3_returns_none(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "bad-token")
+
+    with patch("ocx_mirror_sdk.github.github3", autospec=True) as mock_gh3:
+        mock_gh3.login.return_value = None
+
+        from ocx_mirror_sdk.github import _login
+
+        with pytest.raises(RuntimeError, match="could not be initialized"):
+            _login()
