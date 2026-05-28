@@ -2,10 +2,13 @@
 
 [![CI](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/ocx-sh/ocx-mirror-sdk/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ocx-sh/ocx-mirror-sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/ocx-sh/ocx-mirror-sdk)
+[![Docs](https://img.shields.io/badge/docs-docs.ocx.sh-blue)](https://docs.ocx.sh/sdk/mirror/)
 
 Python SDK for authoring [`ocx-mirror`](https://github.com/ocx-sh/ocx) generator scripts.
 
 `ocx-mirror` is OCX's tool for ingesting upstream tool releases (e.g. CPython, Bun, shellcheck) and republishing them as OCI artifacts. When upstream releases live somewhere `ocx-mirror` cannot crawl directly, a small Python *generator* emits a `url_index` JSON document. This SDK provides the typed building blocks for those generators.
+
+📖 **Full documentation: <https://docs.ocx.sh/sdk/mirror/>**
 
 ## Install
 
@@ -16,11 +19,11 @@ In a [PEP 723](https://peps.python.org/pep-0723/) inline-metadata script (recomm
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.2.0",
+#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.3.0",
 # ]
 # ///
 
-from ocx_mirror_sdk import IndexBuilder, list_releases_graphql
+from ocx_mirror_sdk import IndexBuilder, list_releases, Backend
 ```
 
 Or in a project `pyproject.toml`:
@@ -30,21 +33,62 @@ Or in a project `pyproject.toml`:
 dependencies = ["ocx-mirror-sdk"]
 
 [tool.uv.sources]
-ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.2.0" }
+ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.3.0" }
 ```
 
 `uv.lock` pins to a commit SHA — `uv sync --frozen` is reproducible in CI.
+
+## Quickstart
+
+```python
+from ocx_mirror_sdk import Backend, IndexBuilder, list_releases
+
+# Fetch releases (REST default; switch to GraphQL on big repos)
+releases = list_releases("shellcheck", "shellcheck")
+
+# Or explicitly:
+releases = list_releases("indygreg", "python-build-standalone", backend=Backend.GRAPHQL)
+
+# Build a url_index document
+builder = IndexBuilder()
+for r in releases:
+    if r.prerelease or r.draft:
+        continue
+    builder.add_version(
+        r.tag_name.lstrip("v"),
+        assets={a.name: a.browser_download_url for a in r.assets},
+    )
+builder.emit()  # writes JSON to stdout
+```
+
+More worked examples live under [`examples/`](examples/) and at <https://docs.ocx.sh/sdk/mirror/recipes/>.
 
 ## Public API
 
 | Symbol | Purpose |
 |---|---|
 | `IndexBuilder` | Typed builder for the `url_index` JSON manifest |
-| `list_releases` | Iterate GitHub releases via REST (github3.py) |
-| `list_releases_graphql` | Iterate GitHub releases via GraphQL (faster for large repos) |
-| `Asset`, `Release` | Typed views of GitHub release assets |
+| `list_releases` | Iterate GitHub releases — single router over REST and GraphQL |
+| `Backend` | `StrEnum`: `REST` / `GRAPHQL` backend selector |
+| `Asset`, `Release` | Typed views of release assets and releases |
 | `extract_urls` | Pull download URLs from release notes |
-| `FileCache` | Disk-backed HTTP response cache, 1h default TTL |
+| `FileCache`, `configure` | Disk-backed HTTP response cache; SDK-wide root override |
+
+### Error hierarchy
+
+Catch `OcxMirrorError` to recover from any SDK failure, or pick a subclass:
+
+| Class | Raised when |
+|---|---|
+| `ConfigurationError` | `GITHUB_TOKEN` missing, client init failed |
+| `TransportError` | Base for network errors |
+| `HttpStatusError` | HTTP 4xx/5xx (carries `.status_code`, `.url`, `.response_text`) |
+| `HttpTimeoutError` | Request timed out |
+| `ApiResponseError` | Malformed JSON, GraphQL `errors` array, repo not found |
+| `SchemaError` | Release payload missing or wrongly-typed field |
+| `CacheError` | On-disk cache IO or corruption (NOT cache miss) |
+
+Original lower-layer exceptions are preserved on `__cause__`.
 
 ## Schema
 
@@ -61,12 +105,13 @@ curl -sSL https://setup.ocx.sh | sh
 Then everything runs through `ocx run`:
 
 ```bash
-ocx run -- task verify   # format + lint + types + tests
+ocx run -- task verify     # format + lint + types + tests
 ocx run -- task test
-ocx run -- task codegen  # regenerate _schema.py from the published schema
+ocx run -- task codegen    # regenerate _schema.py from the published schema
+ocx run -- task docs:serve # live-preview the docs site at localhost:8000
 ```
 
-OCX bootstraps `task` and `uv`; `uv` pulls Python linters (`ruff`, `pyright`) from `[project.optional-dependencies] dev`.
+OCX bootstraps `task` and `uv`; `uv` pulls Python linters (`ruff`, `pyright`) from `[project.optional-dependencies] dev`, and docs tooling from `[project.optional-dependencies] docs`.
 
 ## Stability
 
