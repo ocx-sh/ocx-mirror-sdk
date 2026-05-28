@@ -26,10 +26,16 @@ from ocx_mirror_sdk.index import IndexBuilder
 from ocx_mirror_sdk.releases import Asset, Release
 from ocx_mirror_sdk.text import extract_urls
 
-try:
-    __version__ = _pkg_version("ocx-mirror-sdk")
-except PackageNotFoundError:  # running from source without `uv sync`
-    __version__ = "0.0.0+unknown"
+
+def _resolve_version() -> str:
+    """Return the installed package version, or a fallback when running from source."""
+    try:
+        return _pkg_version("ocx-mirror-sdk")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+__version__ = _resolve_version()
 
 __all__ = [
     "ApiResponseError",
