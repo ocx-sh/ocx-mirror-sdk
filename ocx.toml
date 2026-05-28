@@ -1,0 +1,10 @@
+#:schema https://ocx.sh/schemas/project/v1.json
+# OCX project toolchain.
+#
+# Bootstraps the two host-level tools every contributor needs: `task` (runner)
+# and `uv` (Python package manager). Python linters (ruff, pyright) are pulled
+# by `uv` from the [project.optional-dependencies] dev group in pyproject.toml.
+
+[tools]
+task = "ocx.sh/go-task:3"
+uv = "ocx.sh/uv:0"

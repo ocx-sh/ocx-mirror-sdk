@@ -3,31 +3,64 @@
 version: '3'
 
 vars:
-  SDK_DIR: "{{.ROOT_DIR}}/mirror-sdk-py"
+  # Override to point at a local schema file or a PR preview URL.
+  SCHEMA_URL: '{{.SCHEMA_URL | default "https://ocx.sh/schemas/url-index/v1.json"}}'
+  SCHEMA_FILE: 'schemas/url-index.v1.json'
 
 tasks:
-  schema:
-    desc: Generate JSON Schema for url_index format
+  default:
+    desc: Fast feedback loop — lint + types + tests
     cmds:
-      - mkdir -p {{.SDK_DIR}}/schemas
-      - cargo run --release -p ocx_mirror --features jsonschema --bin ocx-mirror -- schema url-index > {{.SDK_DIR}}/schemas/url-index.v1.json 2>/dev/null
+      - task: verify
 
-  codegen:
-    desc: Generate Python types from url_index JSON Schema
-    deps: [schema]
-    dir: "{{.SDK_DIR}}"
+  verify:
+    desc: Full quality gate (format check, lint, types, tests)
     cmds:
-      - >
-        uv run --with 'datamodel-code-generator>=0.26'
-        datamodel-codegen
-        --input schemas/url-index.v1.json
-        --input-file-type jsonschema
-        --output src/ocx_gen/_schema.py
-        --output-model-type dataclasses.dataclass
-        --target-python-version 3.13
+      - task: format:check
+      - task: lint
+      - task: types
+      - task: test
+
+  format:
+    desc: Apply formatting
+    cmds:
+      - uv run --extra dev ruff format src tests
+
+  format:check:
+    desc: Check formatting without applying
+    cmds:
+      - uv run --extra dev ruff format --check src tests
+
+  lint:
+    desc: Lint source
+    cmds:
+      - uv run --extra dev ruff check src tests
+
+  types:
+    desc: Type-check source
+    cmds:
+      - uv run --extra dev pyright
 
   test:
-    desc: Run mirror SDK tests
-    dir: "{{.SDK_DIR}}"
+    desc: Run pytest suite
     cmds:
-      - uv run --with 'pytest>=8' pytest tests/ -v
+      - uv run --extra dev pytest
+
+  schema:fetch:
+    desc: Fetch the canonical url-index JSON Schema from the website
+    cmds:
+      - mkdir -p schemas
+      - curl --fail --silent --show-error --location "{{.SCHEMA_URL}}" -o {{.SCHEMA_FILE}}
+
+  codegen:
+    desc: Regenerate src/ocx_mirror_sdk/_schema.py from the JSON Schema
+    deps: [schema:fetch]
+    cmds:
+      - >
+        uv run --extra dev
+        datamodel-codegen
+        --input {{.SCHEMA_FILE}}
+        --input-file-type jsonschema
+        --output src/ocx_mirror_sdk/_schema.py
+        --output-model-type dataclasses.dataclass
+        --target-python-version 3.13
