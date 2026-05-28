@@ -67,7 +67,14 @@ Optional shell convenience: `eval "$(ocx env --shell=sh)"` once per session, the
 
 ## Distribution
 
-Consumers pin via PEP 723 inline metadata or `[tool.uv.sources]` git dep — see `README.md`. PyPI publish is deferred until post-v1.0.
+Two install paths, both reproducible via `uv.lock`:
+
+- **Git tag pin** (`git+https://github.com/ocx-sh/ocx-mirror-sdk@vX.Y.Z`) — primary, used in README examples.
+- **Wheel asset** (`https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/vX.Y.Z/ocx_mirror_sdk-X.Y.Z-py3-none-any.whl`) — pre-built, skips `hatchling` at install time.
+
+PyPI publish deferred until post-v1.0.
+
+Release flow: `ocx run -- task release:prep VERSION=X.Y.Z` bumps `pyproject.toml` + README + docs install snippets. Edit `docs/changelog.md` by hand — rename `## Unreleased` → `## vX.Y.Z — <name>`. Commit, push `vX.Y.Z` tag. `.github/workflows/release.yml` validates tag ↔ `pyproject.toml` coherence, builds the wheel + sdist via `uv build`, uploads both as Release assets. `workflow_dispatch` enables branch dry runs.
 
 ## Stability
 
