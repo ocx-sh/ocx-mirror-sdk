@@ -1,11 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The OCX Authors
 
-from ocx_mirror_sdk.cache import FileCache
-from ocx_mirror_sdk.github import list_releases
-from ocx_mirror_sdk.github_graphql import list_releases as list_releases_graphql
-from ocx_mirror_sdk.github_types import Asset, Release
+"""Public API for `ocx-mirror-sdk`.
+
+Top-level imports are the only stable contract. Everything reachable via
+underscored module paths is package-private and may change without notice.
+"""
+
+from ocx_mirror_sdk.cache import FileCache, configure
+from ocx_mirror_sdk.errors import (
+    ApiResponseError,
+    CacheError,
+    ConfigurationError,
+    HttpStatusError,
+    HttpTimeoutError,
+    OcxMirrorError,
+    SchemaError,
+    TransportError,
+)
+from ocx_mirror_sdk.github import Backend, list_releases
 from ocx_mirror_sdk.index import IndexBuilder
+from ocx_mirror_sdk.releases import Asset, Release
 from ocx_mirror_sdk.text import extract_urls
 
-__all__ = ["Asset", "FileCache", "IndexBuilder", "Release", "extract_urls", "list_releases", "list_releases_graphql"]
+__all__ = [
+    "ApiResponseError",
+    "Asset",
+    "Backend",
+    "CacheError",
+    "ConfigurationError",
+    "FileCache",
+    "HttpStatusError",
+    "HttpTimeoutError",
+    "IndexBuilder",
+    "OcxMirrorError",
+    "Release",
+    "SchemaError",
+    "TransportError",
+    "configure",
+    "extract_urls",
+    "list_releases",
+]

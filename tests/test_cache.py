@@ -2,9 +2,13 @@
 # Copyright 2026 The OCX Authors
 
 import os
+import stat
 import time
 
-from ocx_mirror_sdk.cache import FileCache
+import pytest
+
+from ocx_mirror_sdk import CacheError, FileCache, configure
+from ocx_mirror_sdk import cache as cache_module
 
 
 def test_put_and_get(tmp_path):
@@ -164,3 +168,71 @@ def test_fetch_json_bypassed_when_disabled(tmp_path):
     cache.fetch_json("key", loader)
     cache.fetch_json("key", loader)
     assert len(calls) == 2
+
+
+# -- Error paths --------------------------------------------------------------
+
+
+def test_get_json_raises_cache_error_on_corrupt_payload(tmp_path):
+    cache = FileCache("test", root=tmp_path)
+    path = tmp_path / "test" / "corrupt"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"<<not json>>")
+
+    with pytest.raises(CacheError, match="not valid JSON"):
+        cache.get_json("corrupt")
+
+
+def test_get_raises_cache_error_on_unreadable_file(tmp_path):
+    """Permission-denied on read surfaces as CacheError."""
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses POSIX permission bits")
+    cache = FileCache("test", root=tmp_path)
+    cache.put("locked", b"data")
+    path = tmp_path / "test" / "locked"
+    os.chmod(path, 0)
+    try:
+        with pytest.raises(CacheError, match="failed to read"):
+            cache.get("locked")
+    finally:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_put_raises_cache_error_on_unwritable_dir(tmp_path):
+    """Permission-denied on write surfaces as CacheError."""
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses POSIX permission bits")
+    cache = FileCache("locked-domain", root=tmp_path)
+    # Create the domain dir first so write resolves the failure to mkdir->write
+    cache.put("seed", b"x")
+    os.chmod(tmp_path / "locked-domain", stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        with pytest.raises(CacheError, match="failed to write"):
+            cache.put("new", b"data")
+    finally:
+        os.chmod(tmp_path / "locked-domain", stat.S_IRWXU)
+
+
+# -- configure() override -----------------------------------------------------
+
+
+def test_configure_overrides_default_cache_root(tmp_path, monkeypatch):
+    """configure(cache_root=...) redirects the default root."""
+    monkeypatch.setattr(cache_module, "_cache_root_override", None)
+    try:
+        configure(cache_root=tmp_path)
+        # New instance with NO explicit root reads the override lazily.
+        cache = FileCache("dom")
+        cache.put("k", b"v")
+        assert (tmp_path / "dom" / "k").read_bytes() == b"v"
+    finally:
+        configure(cache_root=None)
+
+
+def test_explicit_root_overrides_configure(tmp_path, monkeypatch):
+    """When ``root=`` is passed to FileCache, configure() is ignored."""
+    monkeypatch.setattr(cache_module, "_cache_root_override", tmp_path / "ignored")
+    cache = FileCache("dom", root=tmp_path / "explicit")
+    cache.put("k", b"v")
+    assert (tmp_path / "explicit" / "dom" / "k").read_bytes() == b"v"
+    assert not (tmp_path / "ignored").exists()

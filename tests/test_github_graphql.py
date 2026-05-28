@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The OCX Authors
 
-"""Tests for ``ocx_mirror_sdk.github_graphql.list_releases``.
+"""Tests for the GraphQL backend of ``ocx_mirror_sdk.list_releases``.
 
-Uses an injected ``httpx.Client`` with ``MockTransport`` (no plugin) per
-``quality-tests.md`` §8, and ``FakeFileCache`` (``tests/_fakes.py``) per §7
-in place of the disk-backed cache.
+Exercises the router (``backend=Backend.GRAPHQL``) end-to-end. Uses an
+injected ``httpx.Client`` with ``MockTransport`` per ``quality-tests.md``
+§8, and ``FakeFileCache`` (``tests/_fakes.py``) per §7 in place of the
+disk-backed cache.
 """
 
 import json
@@ -13,10 +14,16 @@ from collections.abc import Callable
 
 import httpx
 import pytest
+from _fakes import FakeFileCache
 
-from ocx_mirror_sdk import github_graphql
-from ocx_mirror_sdk.github_graphql import list_releases
-from tests._fakes import FakeFileCache
+from ocx_mirror_sdk import (
+    ApiResponseError,
+    Backend,
+    ConfigurationError,
+    HttpStatusError,
+    list_releases,
+)
+from ocx_mirror_sdk.github import _graphql as graphql_module
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -81,9 +88,13 @@ def _isolate_module_caches(monkeypatch) -> tuple[FakeFileCache, FakeFileCache]:
     """Swap the module-level release + asset caches with in-memory fakes."""
     releases_cache = FakeFileCache()
     assets_cache = FakeFileCache()
-    monkeypatch.setattr(github_graphql, "_releases_cache", releases_cache)
-    monkeypatch.setattr(github_graphql, "_assets_cache", assets_cache)
+    monkeypatch.setattr(graphql_module, "_releases_cache", releases_cache)
+    monkeypatch.setattr(graphql_module, "_assets_cache", assets_cache)
     return releases_cache, assets_cache
+
+
+def _graphql(**kw):
+    return list_releases(backend=Backend.GRAPHQL, **kw)
 
 
 # ---------------------------------------------------------------------------
@@ -91,11 +102,11 @@ def _isolate_module_caches(monkeypatch) -> tuple[FakeFileCache, FakeFileCache]:
 # ---------------------------------------------------------------------------
 
 
-def test_list_releases_raises_when_no_token(monkeypatch):
+def test_list_releases_raises_configuration_error_when_no_token(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
-    with pytest.raises(ValueError, match="GITHUB_TOKEN is required"):
-        list_releases("owner", "repo")
+    with pytest.raises(ConfigurationError, match="GITHUB_TOKEN is required"):
+        _graphql(owner="owner", repo="repo")
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +126,7 @@ def test_list_releases_single_page_single_release(monkeypatch):
             ),
         )
 
-    result = list_releases("owner", "repo", client=_client(handler))
+    result = _graphql(owner="owner", repo="repo", client=_client(handler))
 
     assert len(result) == 1
     assert result[0].tag_name == "v1.0.0"
@@ -137,7 +148,7 @@ def test_list_releases_paginates_releases(monkeypatch):
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=next(pages))
 
-    result = list_releases("o", "r", client=_client(handler))
+    result = _graphql(owner="o", repo="r", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1", "v2"]
 
@@ -156,7 +167,7 @@ def test_list_releases_stops_when_page_returns_no_nodes(monkeypatch):
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=next(pages))
 
-    result = list_releases("o", "r", client=_client(handler))
+    result = _graphql(owner="o", repo="r", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1"]
 
@@ -183,10 +194,9 @@ def test_list_releases_paginates_assets_within_release(monkeypatch):
         query = body["query"]
         if "releases(" in query:
             return httpx.Response(200, json=_releases_page([release_node]))
-        # asset-page query
         return httpx.Response(200, json=_assets_page(second_page_assets, has_next=False))
 
-    result = list_releases("o", "r", client=_client(handler))
+    result = _graphql(owner="o", repo="r", client=_client(handler))
 
     asset_names = [a.name for a in result[0].assets]
     assert asset_names == [a["name"] for a in first_page_assets + second_page_assets]
@@ -197,26 +207,42 @@ def test_list_releases_paginates_assets_within_release(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_list_releases_raises_when_graphql_returns_errors(monkeypatch):
+def test_list_releases_raises_api_response_error_on_graphql_errors(monkeypatch):
     _set_token(monkeypatch)
     _isolate_module_caches(monkeypatch)
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"errors": [{"message": "rate limited"}], "data": None})
 
-    with pytest.raises(RuntimeError, match="GraphQL errors"):
-        list_releases("o", "r", client=_client(handler))
+    with pytest.raises(ApiResponseError, match="graphql errors"):
+        _graphql(owner="o", repo="r", client=_client(handler))
 
 
-def test_list_releases_raises_on_http_error(monkeypatch):
+def test_list_releases_raises_http_status_error_on_5xx(monkeypatch):
     _set_token(monkeypatch)
     _isolate_module_caches(monkeypatch)
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"data": None})
 
-    with pytest.raises(httpx.HTTPStatusError, match="500"):
-        list_releases("o", "r", client=_client(handler))
+    with pytest.raises(HttpStatusError, match="HTTP 500"):
+        _graphql(owner="o", repo="r", client=_client(handler))
+
+
+def test_list_releases_http_status_error_chains_to_httpx(monkeypatch):
+    """Wrapped exception must preserve original httpx error via __cause__."""
+    _set_token(monkeypatch)
+    _isolate_module_caches(monkeypatch)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="upstream")
+
+    with pytest.raises(HttpStatusError) as exc_info:
+        _graphql(owner="o", repo="r", client=_client(handler))
+
+    assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.response_text == "upstream"
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +255,6 @@ def test_assets_cache_hit_skips_pagination(monkeypatch):
     _, assets_cache = _isolate_module_caches(monkeypatch)
     assets_cache.put_json("o/r/v1", [{"name": "cached.tgz", "downloadUrl": "https://x/cached.tgz"}])
 
-    # Release node advertises a second asset page; the cache hit must short-circuit it.
     release_node = {
         "tagName": "v1",
         "isDraft": False,
@@ -247,10 +272,9 @@ def test_assets_cache_hit_skips_pagination(monkeypatch):
         request_log.append(body["query"])
         return httpx.Response(200, json=_releases_page([release_node]))
 
-    result = list_releases("o", "r", client=_client(handler))
+    result = _graphql(owner="o", repo="r", client=_client(handler))
 
     assert [a.name for a in result[0].assets] == ["cached.tgz"]
-    # Only the releases query should hit; the asset-page query must NOT.
     assert all("releases(" in q for q in request_log)
 
 
@@ -273,7 +297,7 @@ def test_releases_cache_hit_skips_http(monkeypatch):
     def handler(_request: httpx.Request) -> httpx.Response:
         raise AssertionError("HTTP must not be called on cache hit")
 
-    result = list_releases("o", "r", client=_client(handler))
+    result = _graphql(owner="o", repo="r", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1"]
 
@@ -308,9 +332,9 @@ def test_list_releases_applies_filters(monkeypatch, include_prereleases, include
             ),
         )
 
-    result = list_releases(
-        "o",
-        "r",
+    result = _graphql(
+        owner="o",
+        repo="r",
         include_prereleases=include_prereleases,
         include_drafts=include_drafts,
         client=_client(handler),

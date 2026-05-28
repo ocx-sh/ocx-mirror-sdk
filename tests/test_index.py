@@ -70,3 +70,14 @@ def test_multiple_versions():
 
     index = builder.build()
     assert len(index.versions) == 2
+
+
+def test_build_returns_snapshot_decoupled_from_builder():
+    """Mutating the builder after ``build()`` must not affect the returned index."""
+    builder = IndexBuilder()
+    builder.add_version("1.0.0", assets={"a.tgz": "https://x/a"})
+
+    index = builder.build()
+    builder.add_version("2.0.0", assets={"b.tgz": "https://x/b"})
+
+    assert set(index.versions) == {"1.0.0"}, "builder mutation leaked into returned index"
