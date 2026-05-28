@@ -112,6 +112,7 @@ def list_releases(
     include_prereleases: bool = True,
     include_drafts: bool = True,
     cache: FileCache | None = None,
+    client: httpx.Client | None = None,
 ) -> list[Release]:
     """Return releases for *owner/repo* via the GitHub GraphQL API.
 
@@ -119,6 +120,12 @@ def list_releases(
     to avoid 504 errors on repos with large asset counts.
 
     Requires ``GITHUB_TOKEN`` (GraphQL API does not support anonymous access).
+
+    Args:
+        cache: Optional cache override. Defaults to the module-level 1-hour cache.
+        client: Optional injected ``httpx.Client``. Defaults to a per-call
+            client with a 30s timeout. Tests should pass
+            ``httpx.Client(transport=httpx.MockTransport(...))``.
     """
     token = get_token()
     if not token:
@@ -132,7 +139,9 @@ def list_releases(
         cursor = None
         max_pages = 20
 
-        with httpx.Client(timeout=30.0) as client:
+        ctx = client if client is not None else httpx.Client(timeout=30.0)
+        owns_client = client is None
+        try:
             for page_num in range(max_pages):
                 log.info(
                     "fetching releases page %d for %s/%s (%d so far)",
@@ -142,7 +151,7 @@ def list_releases(
                     len(all_releases),
                 )
                 data = _graphql(
-                    client,
+                    ctx,
                     headers,
                     _RELEASES_QUERY,
                     {
@@ -159,7 +168,7 @@ def list_releases(
 
                 for node in nodes:
                     tag = node["tagName"]
-                    assets_raw = _fetch_all_assets(client, headers, owner, repo, tag, node["releaseAssets"])
+                    assets_raw = _fetch_all_assets(ctx, headers, owner, repo, tag, node["releaseAssets"])
                     all_releases.append(
                         {
                             "tag_name": tag,
@@ -184,6 +193,9 @@ def list_releases(
                     owner,
                     repo,
                 )
+        finally:
+            if owns_client:
+                ctx.close()
 
         return all_releases
 
