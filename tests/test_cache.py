@@ -4,7 +4,7 @@
 import os
 import time
 
-from ocx_gen.cache import FileCache
+from ocx_mirror_sdk.cache import FileCache
 
 
 def test_put_and_get(tmp_path):

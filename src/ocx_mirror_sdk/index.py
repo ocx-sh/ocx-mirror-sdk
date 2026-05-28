@@ -5,8 +5,9 @@
 
 import json
 import sys
+from typing import TextIO
 
-from ocx_gen._schema import RemoteIndex, RemoteVersionEntry
+from ocx_mirror_sdk._schema import RemoteIndex, RemoteVersionEntry
 
 
 class IndexBuilder:
@@ -43,13 +44,12 @@ class IndexBuilder:
         """Return the constructed RemoteIndex."""
         return RemoteIndex(versions=self._versions)
 
-    def emit(self, file=sys.stdout) -> None:
+    def emit(self, file: TextIO = sys.stdout) -> None:
         """Serialize to JSON and write to the given file (default: stdout)."""
         index = self.build()
         data = {
             "versions": {
-                ver: {"prerelease": entry.prerelease, "assets": entry.assets}
-                for ver, entry in index.versions.items()
+                ver: {"prerelease": entry.prerelease, "assets": entry.assets} for ver, entry in index.versions.items()
             }
         }
         json.dump(data, file, indent=2)

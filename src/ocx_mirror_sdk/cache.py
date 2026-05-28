@@ -29,7 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-_DEFAULT_ROOT = Path.home() / ".cache" / "ocx-gen"
+_DEFAULT_ROOT = Path.home() / ".cache" / "ocx-mirror-sdk"
 
 
 class FileCache:
@@ -40,7 +40,7 @@ class FileCache:
         max_age: Maximum age of cache entries in seconds.  ``0`` disables
             caching (every ``get`` returns ``None``, ``fetch`` always calls
             the loader).
-        root: Root cache directory.  Defaults to ``~/.cache/ocx-gen/``.
+        root: Root cache directory.  Defaults to ``~/.cache/ocx-mirror-sdk/``.
     """
 
     def __init__(

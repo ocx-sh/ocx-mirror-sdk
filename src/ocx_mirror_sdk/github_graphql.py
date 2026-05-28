@@ -16,8 +16,8 @@ import logging
 
 import httpx
 
-from ocx_gen.cache import FileCache
-from ocx_gen.github_types import Release, fetch_and_filter, get_token
+from ocx_mirror_sdk.cache import FileCache
+from ocx_mirror_sdk.github_types import Release, fetch_and_filter, get_token
 
 log = logging.getLogger(__name__)
 
@@ -85,9 +85,17 @@ def _fetch_all_assets(
 
     while page_info["hasNextPage"]:
         log.debug("  %s: fetching more assets (%d so far)", tag, len(assets))
-        data = _graphql(client, headers, _ASSETS_PAGE_QUERY, {
-            "owner": owner, "repo": repo, "tag": tag, "cursor": page_info["endCursor"],
-        })
+        data = _graphql(
+            client,
+            headers,
+            _ASSETS_PAGE_QUERY,
+            {
+                "owner": owner,
+                "repo": repo,
+                "tag": tag,
+                "cursor": page_info["endCursor"],
+            },
+        )
         page = data["repository"]["release"]["releaseAssets"]
         assets.extend(page["nodes"])
         page_info = page["pageInfo"]
@@ -107,7 +115,7 @@ def list_releases(
 ) -> list[Release]:
     """Return releases for *owner/repo* via the GitHub GraphQL API.
 
-    Same interface as :func:`ocx_gen.github.list_releases` but uses GraphQL
+    Same interface as :func:`ocx_mirror_sdk.github.list_releases` but uses GraphQL
     to avoid 504 errors on repos with large asset counts.
 
     Requires ``GITHUB_TOKEN`` (GraphQL API does not support anonymous access).
@@ -126,10 +134,23 @@ def list_releases(
 
         with httpx.Client(timeout=30.0) as client:
             for page_num in range(max_pages):
-                log.info("fetching releases page %d for %s/%s (%d so far)", page_num + 1, owner, repo, len(all_releases))
-                data = _graphql(client, headers, _RELEASES_QUERY, {
-                    "owner": owner, "repo": repo, "cursor": cursor,
-                })
+                log.info(
+                    "fetching releases page %d for %s/%s (%d so far)",
+                    page_num + 1,
+                    owner,
+                    repo,
+                    len(all_releases),
+                )
+                data = _graphql(
+                    client,
+                    headers,
+                    _RELEASES_QUERY,
+                    {
+                        "owner": owner,
+                        "repo": repo,
+                        "cursor": cursor,
+                    },
+                )
                 releases_data = data["repository"]["releases"]
                 nodes = releases_data["nodes"]
 
@@ -138,31 +159,39 @@ def list_releases(
 
                 for node in nodes:
                     tag = node["tagName"]
-                    assets_raw = _fetch_all_assets(
-                        client, headers, owner, repo, tag, node["releaseAssets"]
+                    assets_raw = _fetch_all_assets(client, headers, owner, repo, tag, node["releaseAssets"])
+                    all_releases.append(
+                        {
+                            "tag_name": tag,
+                            "body": "",
+                            "prerelease": node["isPrerelease"],
+                            "draft": node["isDraft"],
+                            "assets": [
+                                {"name": a["name"], "browser_download_url": a["downloadUrl"]} for a in assets_raw
+                            ],
+                        }
                     )
-                    all_releases.append({
-                        "tag_name": tag,
-                        "body": "",
-                        "prerelease": node["isPrerelease"],
-                        "draft": node["isDraft"],
-                        "assets": [
-                            {"name": a["name"], "browser_download_url": a["downloadUrl"]}
-                            for a in assets_raw
-                        ],
-                    })
 
                 page_info = releases_data["pageInfo"]
                 if not page_info["hasNextPage"]:
                     break
                 cursor = page_info["endCursor"]
             else:
-                log.warning("reached page limit (%d pages, %d releases) for %s/%s — results may be truncated",
-                            max_pages, len(all_releases), owner, repo)
+                log.warning(
+                    "reached page limit (%d pages, %d releases) for %s/%s — results may be truncated",
+                    max_pages,
+                    len(all_releases),
+                    owner,
+                    repo,
+                )
 
         return all_releases
 
     return fetch_and_filter(
-        owner, repo, effective_cache, fetch,
-        include_prereleases=include_prereleases, include_drafts=include_drafts,
+        owner,
+        repo,
+        effective_cache,
+        fetch,
+        include_prereleases=include_prereleases,
+        include_drafts=include_drafts,
     )

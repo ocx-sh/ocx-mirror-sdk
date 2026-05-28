@@ -8,7 +8,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ocx_gen.cache import FileCache
+from ocx_mirror_sdk.cache import FileCache
 
 log = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@
 Thin wrapper around ``github3.py`` providing paginated release listing
 with automatic authentication via the ``GITHUB_TOKEN`` environment variable.
 
-Responses are cached to disk (default: ``~/.cache/ocx-gen/github/``, 1 hour
+Responses are cached to disk (default: ``~/.cache/ocx-mirror-sdk/github/``, 1 hour
 TTL) so repeated runs within the same window avoid API rate limits.
 """
 
@@ -14,8 +14,8 @@ import logging
 
 import github3
 
-from ocx_gen.cache import FileCache
-from ocx_gen.github_types import Release, fetch_and_filter, get_token
+from ocx_mirror_sdk.cache import FileCache
+from ocx_mirror_sdk.github_types import Release, fetch_and_filter, get_token
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,8 @@ def _login() -> github3.GitHub:
     """Create a GitHub client, authenticated if GITHUB_TOKEN is set."""
     token = get_token()
     gh = github3.login(token=token) if token else github3.GitHub()
+    if gh is None:  # github3.login returns None when the token is empty / invalid
+        raise RuntimeError("github3 client could not be initialized")
     gh.session.default_read_timeout = 30
     return gh
 
@@ -52,7 +54,7 @@ def list_releases(
     is applied after cache retrieval, so different filter settings share
     the same cache entry and never cause extra API calls.
 
-    Responses are cached for 1 hour under ``~/.cache/ocx-gen/github/``.
+    Responses are cached for 1 hour under ``~/.cache/ocx-mirror-sdk/github/``.
 
     Pagination is handled automatically by the underlying library.
     Authentication uses the ``GITHUB_TOKEN`` environment variable when set.
@@ -68,8 +70,7 @@ def list_releases(
         results: list[dict] = []
         for release in repository.releases():
             assets = [
-                {"name": asset.name, "browser_download_url": asset.browser_download_url}
-                for asset in release.assets()
+                {"name": asset.name, "browser_download_url": asset.browser_download_url} for asset in release.assets()
             ]
             results.append(
                 {
@@ -83,6 +84,10 @@ def list_releases(
         return results
 
     return fetch_and_filter(
-        owner, repo, effective_cache, fetch,
-        include_prereleases=include_prereleases, include_drafts=include_drafts,
+        owner,
+        repo,
+        effective_cache,
+        fetch,
+        include_prereleases=include_prereleases,
+        include_drafts=include_drafts,
     )

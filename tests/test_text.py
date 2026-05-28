@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The OCX Authors
 
-from ocx_gen.text import extract_urls
+from ocx_mirror_sdk.text import extract_urls
 
 
 def test_extract_urls_basic():

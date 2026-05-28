@@ -4,7 +4,7 @@
 import io
 import json
 
-from ocx_gen import IndexBuilder
+from ocx_mirror_sdk import IndexBuilder
 
 
 def test_add_version():
