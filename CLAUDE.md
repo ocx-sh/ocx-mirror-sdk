@@ -77,6 +77,7 @@ Pre-1.0. Breaking changes ship without migration shims. No deprecation warnings,
 
 - `.claude/rules/quality-core.md` — universal design principles (SOLID, DRY, KISS, YAGNI)
 - `.claude/rules/quality-python.md` — Python 3.13+ quality
+- `.claude/rules/quality-tests.md` — pytest, fixtures, mocking standards (auto-loads on `tests/**`)
 - `.claude/rules/quality-security.md` — security-sensitive change checklist
 - `.claude/rules/subsystem-ci.md` — GitHub Actions conventions
 - `.claude/rules/subsystem-taskfiles.md` — Taskfile conventions
