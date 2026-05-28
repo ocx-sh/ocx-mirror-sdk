@@ -1,28 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The OCX Authors
 
-"""GitHub GraphQL API client for repos with large releases.
+"""GitHub GraphQL backend.
 
-The REST releases endpoint returns 504 on repos with many assets per release
-(e.g., python-build-standalone has ~735 assets per release). This module uses
-the GraphQL API to fetch only the fields we need and paginates assets within
-each release.
-
-Each release's assets are cached individually with a 7-day TTL since assets
-are immutable once published. The release list itself uses a 1-hour TTL.
+Use on repos where the REST API 504s due to large per-release asset
+counts (e.g. python-build-standalone). Release list cached for 1h,
+asset lists cached per release for 7d (assets are immutable).
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 import httpx
 
 from ocx_mirror_sdk.cache import FileCache
-from ocx_mirror_sdk.github_types import Release, fetch_and_filter, get_token
+from ocx_mirror_sdk.errors import ApiResponseError, ConfigurationError
+from ocx_mirror_sdk.github._auth import _get_token
+from ocx_mirror_sdk.github._pipeline import _fetch_and_filter
+from ocx_mirror_sdk.http import post_json
+from ocx_mirror_sdk.releases import Release
 
 log = logging.getLogger(__name__)
 
 _releases_cache = FileCache("github-graphql")
 _assets_cache = FileCache("github-graphql-assets", max_age=7 * 86400)
+
+_GRAPHQL_URL = "https://api.github.com/graphql"
 
 _RELEASES_QUERY = """
 query($owner: String!, $repo: String!, $cursor: String) {
@@ -57,22 +62,43 @@ query($owner: String!, $repo: String!, $tag: String!, $cursor: String!) {
 """
 
 
-def _graphql(client: httpx.Client, headers: dict, query: str, variables: dict) -> dict:
-    resp = client.post(
-        "https://api.github.com/graphql",
+def _graphql(
+    client: httpx.Client,
+    headers: dict[str, str],
+    query: str,
+    variables: dict[str, Any],
+) -> dict[str, Any]:
+    """POST a GraphQL query and return the ``data`` envelope.
+
+    Raises:
+        HttpStatusError / HttpTimeoutError: Transport failure (via :func:`post_json`).
+        ApiResponseError: GraphQL ``errors`` array present, or unexpected
+            response shape.
+    """
+    payload = post_json(
+        _GRAPHQL_URL,
+        body={"query": query, "variables": variables},
         headers=headers,
-        json={"query": query, "variables": variables},
+        client=client,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    if "errors" in data:
-        raise RuntimeError(f"GraphQL errors: {data['errors']}")
-    return data["data"]
+    if not isinstance(payload, dict):
+        raise ApiResponseError("graphql response is not a JSON object", payload=payload)
+    if "errors" in payload:
+        raise ApiResponseError("graphql errors", payload=payload["errors"])
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise ApiResponseError("graphql response missing data", payload=payload)
+    return data
 
 
 def _fetch_all_assets(
-    client: httpx.Client, headers: dict, owner: str, repo: str, tag: str, first_page: dict
-) -> list[dict]:
+    client: httpx.Client,
+    headers: dict[str, str],
+    owner: str,
+    repo: str,
+    tag: str,
+    first_page: dict[str, Any],
+) -> list[dict[str, Any]]:
     """Fetch all assets for a release, with per-release caching."""
     cache_key = f"{owner}/{repo}/{tag}"
     cached = _assets_cache.get_json(cache_key)
@@ -105,7 +131,7 @@ def _fetch_all_assets(
     return assets
 
 
-def list_releases(
+def list_releases_graphql(
     owner: str,
     repo: str,
     *,
@@ -114,29 +140,21 @@ def list_releases(
     cache: FileCache | None = None,
     client: httpx.Client | None = None,
 ) -> list[Release]:
-    """Return releases for *owner/repo* via the GitHub GraphQL API.
+    """Fetch releases via GitHub GraphQL.
 
-    Same interface as :func:`ocx_mirror_sdk.github.list_releases` but uses GraphQL
-    to avoid 504 errors on repos with large asset counts.
-
-    Requires ``GITHUB_TOKEN`` (GraphQL API does not support anonymous access).
-
-    Args:
-        cache: Optional cache override. Defaults to the module-level 1-hour cache.
-        client: Optional injected ``httpx.Client``. Defaults to a per-call
-            client with a 30s timeout. Tests should pass
-            ``httpx.Client(transport=httpx.MockTransport(...))``.
+    Raises:
+        ConfigurationError: ``GITHUB_TOKEN`` is not set.
     """
-    token = get_token()
+    token = _get_token()
     if not token:
-        raise ValueError("GITHUB_TOKEN is required for the GraphQL API (anonymous access is not supported)")
+        raise ConfigurationError("GITHUB_TOKEN is required for the GraphQL API (anonymous access is not supported)")
 
     effective_cache = cache or _releases_cache
     headers = {"Authorization": f"Bearer {token}"}
 
     def fetch() -> list[dict]:
         all_releases: list[dict] = []
-        cursor = None
+        cursor: str | None = None
         max_pages = 20
 
         ctx = client if client is not None else httpx.Client(timeout=30.0)
@@ -154,11 +172,7 @@ def list_releases(
                     ctx,
                     headers,
                     _RELEASES_QUERY,
-                    {
-                        "owner": owner,
-                        "repo": repo,
-                        "cursor": cursor,
-                    },
+                    {"owner": owner, "repo": repo, "cursor": cursor},
                 )
                 releases_data = data["repository"]["releases"]
                 nodes = releases_data["nodes"]
@@ -199,7 +213,7 @@ def list_releases(
 
         return all_releases
 
-    return fetch_and_filter(
+    return _fetch_and_filter(
         owner,
         repo,
         effective_cache,

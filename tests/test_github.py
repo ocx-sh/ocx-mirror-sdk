@@ -1,12 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 The OCX Authors
 
+"""Tests for the REST backend of ``ocx_mirror_sdk.list_releases``.
+
+Exercises the router (``backend=Backend.REST``) end-to-end and the
+``_login`` helper directly.
+"""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ocx_mirror_sdk.github import list_releases
-from ocx_mirror_sdk.github_types import Asset, Release
+from ocx_mirror_sdk import Asset, ConfigurationError, list_releases
+from ocx_mirror_sdk.errors import ApiResponseError
+from ocx_mirror_sdk.releases import Release
 
 
 def _make_asset(name: str, url: str) -> MagicMock:
@@ -32,8 +39,8 @@ def _make_release(
     return release
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_list_releases_basic(mock_login, mock_cache):
     asset = _make_asset("tool.tar.gz", "https://example.com/tool.tar.gz")
     release = _make_release("v1.0.0", body="Release notes", assets=[asset])
@@ -59,8 +66,8 @@ def test_list_releases_basic(mock_login, mock_cache):
     assert r.assets[0].name == "tool.tar.gz"
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_list_releases_empty(mock_login, mock_cache):
     repo = MagicMock()
     repo.releases.return_value = []
@@ -73,20 +80,20 @@ def test_list_releases_empty(mock_login, mock_cache):
     assert results == []
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
-def test_list_releases_repo_not_found(mock_login, mock_cache):
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
+def test_list_releases_repo_not_found_raises_api_response_error(mock_login, mock_cache):
     gh = MagicMock()
     gh.repository.return_value = None
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(ApiResponseError, match="repository not found"):
         list_releases("owner", "nonexistent")
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_list_releases_prerelease_and_draft(mock_login, mock_cache):
     r1 = _make_release("v2.0.0-rc1", prerelease=True)
     r2 = _make_release("v1.0.0", draft=True)
@@ -103,8 +110,8 @@ def test_list_releases_prerelease_and_draft(mock_login, mock_cache):
     assert results[1].draft is True
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_list_releases_null_body(mock_login, mock_cache):
     release = _make_release("v1.0.0")
     release.body = None
@@ -120,8 +127,8 @@ def test_list_releases_null_body(mock_login, mock_cache):
     assert results[0].body == ""
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_list_releases_multiple_assets(mock_login, mock_cache):
     assets = [
         _make_asset("tool-linux.tar.gz", "https://example.com/linux.tar.gz"),
@@ -142,8 +149,8 @@ def test_list_releases_multiple_assets(mock_login, mock_cache):
     assert names == {"tool-linux.tar.gz", "tool-darwin.tar.gz"}
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_exclude_prereleases(mock_login, mock_cache):
     stable = _make_release("v1.0.0")
     pre = _make_release("v2.0.0-rc1", prerelease=True)
@@ -160,8 +167,8 @@ def test_exclude_prereleases(mock_login, mock_cache):
     assert results[0].tag_name == "v1.0.0"
 
 
-@patch("ocx_mirror_sdk.github._cache")
-@patch("ocx_mirror_sdk.github._login")
+@patch("ocx_mirror_sdk.github._rest._cache")
+@patch("ocx_mirror_sdk.github._rest._login")
 def test_exclude_drafts(mock_login, mock_cache):
     stable = _make_release("v1.0.0")
     draft = _make_release("v2.0.0", draft=True)
@@ -178,7 +185,7 @@ def test_exclude_drafts(mock_login, mock_cache):
     assert results[0].tag_name == "v1.0.0"
 
 
-@patch("ocx_mirror_sdk.github._cache")
+@patch("ocx_mirror_sdk.github._rest._cache")
 def test_cache_key_format(mock_cache):
     mock_cache.fetch_json.return_value = []
 
@@ -189,7 +196,7 @@ def test_cache_key_format(mock_cache):
     assert key == "corretto/corretto-21/releases"
 
 
-@patch("ocx_mirror_sdk.github._cache")
+@patch("ocx_mirror_sdk.github._rest._cache")
 def test_cache_key_ignores_filters(mock_cache):
     mock_cache.fetch_json.return_value = []
 
@@ -197,6 +204,35 @@ def test_cache_key_ignores_filters(mock_cache):
 
     key = mock_cache.fetch_json.call_args[0][0]
     assert key == "o/r/releases"
+
+
+@patch("ocx_mirror_sdk.github._rest._cache")
+def test_list_releases_accepts_string_backend(mock_cache):
+    """Backend may be passed as raw string (StrEnum drop-in)."""
+    mock_cache.fetch_json.return_value = []
+    assert list_releases("o", "r", backend="rest") == []
+
+
+@patch("ocx_mirror_sdk.github._rest._cache")
+def test_list_releases_session_kwarg_replaces_login(mock_cache):
+    """When ``session`` is injected, ``_login`` must NOT be called."""
+    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
+
+    repo = MagicMock()
+    repo.releases.return_value = []
+    fake_session = MagicMock()
+    fake_session.repository.return_value = repo
+
+    with patch("ocx_mirror_sdk.github._rest._login") as mock_login:
+        list_releases("o", "r", session=fake_session)
+
+    mock_login.assert_not_called()
+    fake_session.repository.assert_called_once_with("o", "r")
+
+
+def test_list_releases_unknown_backend_raises_value_error():
+    with pytest.raises(ValueError, match="'foo'"):
+        list_releases("o", "r", backend="foo")
 
 
 def test_release_round_trip():
@@ -219,11 +255,11 @@ def test_release_round_trip():
 def test_login_uses_token_when_env_set(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
 
-    with patch("ocx_mirror_sdk.github.github3", autospec=True) as mock_gh3:
+    with patch("ocx_mirror_sdk.github._rest.github3", autospec=True) as mock_gh3:
         gh = MagicMock()
         mock_gh3.login.return_value = gh
 
-        from ocx_mirror_sdk.github import _login
+        from ocx_mirror_sdk.github._rest import _login
 
         result = _login()
 
@@ -236,11 +272,11 @@ def test_login_uses_token_when_env_set(monkeypatch):
 def test_login_uses_anonymous_when_no_token(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
-    with patch("ocx_mirror_sdk.github.github3", autospec=True) as mock_gh3:
+    with patch("ocx_mirror_sdk.github._rest.github3", autospec=True) as mock_gh3:
         gh = MagicMock()
         mock_gh3.GitHub.return_value = gh
 
-        from ocx_mirror_sdk.github import _login
+        from ocx_mirror_sdk.github._rest import _login
 
         result = _login()
 
@@ -249,13 +285,13 @@ def test_login_uses_anonymous_when_no_token(monkeypatch):
     assert result is gh
 
 
-def test_login_raises_when_github3_returns_none(monkeypatch):
+def test_login_raises_configuration_error_when_github3_returns_none(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "bad-token")
 
-    with patch("ocx_mirror_sdk.github.github3", autospec=True) as mock_gh3:
+    with patch("ocx_mirror_sdk.github._rest.github3", autospec=True) as mock_gh3:
         mock_gh3.login.return_value = None
 
-        from ocx_mirror_sdk.github import _login
+        from ocx_mirror_sdk.github._rest import _login
 
-        with pytest.raises(RuntimeError, match="could not be initialized"):
+        with pytest.raises(ConfigurationError, match="could not be initialized"):
             _login()

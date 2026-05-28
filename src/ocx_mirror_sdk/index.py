@@ -41,8 +41,13 @@ class IndexBuilder:
         return len(self._versions)
 
     def build(self) -> RemoteIndex:
-        """Return the constructed RemoteIndex."""
-        return RemoteIndex(versions=self._versions)
+        """Return the constructed :class:`RemoteIndex`.
+
+        The returned object holds a snapshot copy of the builder's state.
+        Mutating the builder after :meth:`build` does not affect previously
+        returned indexes, and vice versa.
+        """
+        return RemoteIndex(versions=dict(self._versions))
 
     def emit(self, file: TextIO = sys.stdout) -> None:
         """Serialize to JSON and write to the given file (default: stdout)."""
