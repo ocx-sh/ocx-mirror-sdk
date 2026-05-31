@@ -25,7 +25,7 @@ import httpx
 from ocx_mirror_sdk._pipeline import fetch_and_filter
 from ocx_mirror_sdk.cache import FileCache
 from ocx_mirror_sdk.errors import ApiResponseError, OcxMirrorError
-from ocx_mirror_sdk.gitlab._auth import _get_token
+from ocx_mirror_sdk.gitlab._auth import _resolve_auth_header
 from ocx_mirror_sdk.http import fetch_json
 from ocx_mirror_sdk.releases import Release
 
@@ -116,8 +116,7 @@ def _do_list_releases(
     effective_cache = cache or _cache
     project_id = quote(f"{namespace}/{project}", safe="")
     base = f"{host.rstrip('/')}/api/v4/projects/{project_id}"
-    token = _get_token()
-    headers = {"PRIVATE-TOKEN": token} if token else None
+    headers = _resolve_auth_header()
     netloc = urlsplit(host).netloc or host
     cache_key = f"{netloc}/{namespace}/{project}"
 

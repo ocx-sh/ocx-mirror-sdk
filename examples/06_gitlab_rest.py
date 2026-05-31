@@ -10,8 +10,10 @@
 Mirrors ``01_shellcheck_rest.py`` for a GitLab-hosted project. The same
 ``IndexBuilder`` consumes the source-agnostic ``Release`` objects.
 
-For a self-hosted instance, pass ``host="https://gitlab.example.com"`` and set
-``GITLAB_TOKEN`` for private projects.
+For a self-hosted instance, pass ``host="https://gitlab.example.com"``. Auth is
+picked from the environment automatically: set ``GITLAB_TOKEN`` for private
+projects locally; inside a GitLab CI/CD job the injected ``CI_JOB_TOKEN`` is
+used without any change.
 
 Usage:
     uv run examples/06_gitlab_rest.py > gitlab-runner.json

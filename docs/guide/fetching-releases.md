@@ -104,10 +104,26 @@ releases = gitlab.list_releases("group/subgroup", "project")
 | | GitLab REST |
 |---|---|
 | Library | `httpx` |
-| Auth | Optional `GITLAB_TOKEN` (sent as `PRIVATE-TOKEN`); anonymous works on public projects |
+| Auth | Auto-selected from the environment; anonymous works on public projects |
 | Self-hosted | `host=` (default `https://gitlab.com`) |
 | Release notes (`body`) | Yes (`description`) |
 | Release list TTL | 1 h |
+
+### Authentication
+
+The token and header are picked from the environment automatically, so the
+same script runs locally and inside a GitLab CI/CD pipeline unchanged
+(precedence — first match wins):
+
+| Env var | Header sent | Typical source |
+|---|---|---|
+| `GITLAB_TOKEN` | `PRIVATE-TOKEN` | Personal / project / group access token you set |
+| `CI_JOB_TOKEN` | `JOB-TOKEN` | Injected automatically into every GitLab CI/CD job |
+
+`GITLAB_TOKEN` wins when both are present — an access token you set
+explicitly has broader scope than the short-lived job token. With neither
+set, requests are anonymous (fine for public projects). See the
+[GitLab REST API authentication docs](https://docs.gitlab.com/api/rest/authentication/).
 
 Field mapping into [`Release`](../api/releases.md#release):
 

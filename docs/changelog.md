@@ -11,6 +11,9 @@ Notable releases:
   host="https://gitlab.com", include_prereleases=True, ...)` fetches releases
   from gitlab.com or a self-hosted instance via the REST API (no new
   dependency). Returns the same `Release`/`Asset` objects as the GitHub source.
+  Authentication is auto-selected from the environment: `GITLAB_TOKEN`
+  (`PRIVATE-TOKEN` header) takes precedence, falling back to `CI_JOB_TOKEN`
+  (`JOB-TOKEN` header) inside GitLab CI/CD jobs; anonymous on public projects.
 - **New**: `http.fetch_json` accepts an optional `headers=` argument.
 - **Internal**: the shared fetch/deserialize/filter pipeline moved from
   `github/_pipeline.py` to `ocx_mirror_sdk/_pipeline.py` (now used by both

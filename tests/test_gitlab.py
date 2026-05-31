@@ -33,6 +33,7 @@ def cache(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_token(monkeypatch):
     monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+    monkeypatch.delenv("CI_JOB_TOKEN", raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +270,35 @@ def test_list_releases_sends_private_token_header_when_env_set(monkeypatch):
     assert seen[0]["private-token"] == "secret-token"
 
 
+def test_list_releases_uses_job_token_header_in_ci(monkeypatch):
+    monkeypatch.setenv("CI_JOB_TOKEN", "ci-job-token")
+    seen: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers)
+        return httpx.Response(200, json=[])
+
+    gitlab.list_releases("o", "p", client=_client(handler))
+
+    assert seen[0]["job-token"] == "ci-job-token"
+    assert "private-token" not in seen[0]
+
+
+def test_list_releases_prefers_private_token_over_job_token(monkeypatch):
+    monkeypatch.setenv("GITLAB_TOKEN", "personal-token")
+    monkeypatch.setenv("CI_JOB_TOKEN", "ci-job-token")
+    seen: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers)
+        return httpx.Response(200, json=[])
+
+    gitlab.list_releases("o", "p", client=_client(handler))
+
+    assert seen[0]["private-token"] == "personal-token"
+    assert "job-token" not in seen[0]
+
+
 def test_list_releases_omits_token_header_when_absent():
     seen: list[httpx.Headers] = []
 
@@ -279,6 +309,7 @@ def test_list_releases_omits_token_header_when_absent():
     gitlab.list_releases("o", "p", client=_client(handler))
 
     assert "private-token" not in seen[0]
+    assert "job-token" not in seen[0]
 
 
 # ---------------------------------------------------------------------------
