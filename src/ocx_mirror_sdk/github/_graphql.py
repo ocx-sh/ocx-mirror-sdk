@@ -15,10 +15,10 @@ from typing import Any
 
 import httpx
 
+from ocx_mirror_sdk._pipeline import fetch_and_filter
 from ocx_mirror_sdk.cache import FileCache
 from ocx_mirror_sdk.errors import ApiResponseError, ConfigurationError
 from ocx_mirror_sdk.github._auth import _get_token
-from ocx_mirror_sdk.github._pipeline import _fetch_and_filter
 from ocx_mirror_sdk.http import post_json
 from ocx_mirror_sdk.releases import Release
 
@@ -213,11 +213,11 @@ def list_releases_graphql(
 
         return all_releases
 
-    return _fetch_and_filter(
-        owner,
-        repo,
+    return fetch_and_filter(
         effective_cache,
+        f"{owner}/{repo}",
         fetch,
+        label=f"{owner}/{repo}",
         include_prereleases=include_prereleases,
         include_drafts=include_drafts,
     )
