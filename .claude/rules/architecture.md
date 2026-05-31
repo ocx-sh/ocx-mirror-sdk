@@ -19,12 +19,15 @@ paths:
 | `cache.py` | `FileCache` — disk-backed cache with TTL + atomic writes. `configure(cache_root=...)` for SDK-wide root override. Miss returns `None`; IO failure / corrupt JSON raise `CacheError`. |
 | `http.py` | Retry-aware HTTP helpers (`fetch_json`, `fetch_text`, `post_json`). Wraps `httpx` exceptions into typed `Transport*` errors at the boundary. |
 | `text.py` | `extract_urls` — pull download URLs from release-note bodies. |
+| `_pipeline.py` | Source-agnostic `fetch_and_filter(cache, cache_key, loader, *, label, ...)` post-processor (cache → deserialize → filter). Used by every release source. |
 | `github/` | GitHub release source package. Only `Backend` + `list_releases` are re-exported. |
 | `github/_router.py` | `Backend` `StrEnum` + the `list_releases` router. Dispatches to REST or GraphQL backend; logs once at the public boundary before re-raising. |
 | `github/_rest.py` | REST backend (`github3.py`). Caches per `(owner, repo)` for 1h. Accepts an optional `session=` DI hook. |
 | `github/_graphql.py` | GraphQL backend (`httpx` via `http.post_json`). Caches releases for 1h; per-release asset lists for 7d (assets are immutable). |
-| `github/_pipeline.py` | Shared `_fetch_and_filter` post-processor used by both backends. |
 | `github/_auth.py` | `_get_token` — reads `GITHUB_TOKEN`. |
+| `gitlab/` | GitLab release source package. Only `list_releases` is re-exported. |
+| `gitlab/_rest.py` | REST backend (`httpx` via `http.fetch_json`). Paginated `GET /api/v4/projects/:id/releases`; caches per `(host, namespace, project)` for 1h. Configurable `host=`, optional `client=` DI hook. `draft` always `False`; `prerelease` ← `upcoming_release`; assets from `assets.links`. |
+| `gitlab/_auth.py` | `_get_token` — reads `GITLAB_TOKEN`. |
 | `_schema.py` | **Generated.** Dataclasses for the `url_index` format. Regenerated via `task codegen`. |
 
 ## Public API contract
@@ -32,8 +35,9 @@ paths:
 | Symbol | Stability |
 |---|---|
 | `IndexBuilder` | `add_version(version, *, assets, prerelease=False)` + `build()` + `emit(file=stdout)`. `build()` returns a snapshot. |
-| `list_releases(owner, repo, *, backend=Backend.REST, ...)` | Single router over REST + GraphQL. Accepts `Backend` enum or raw string. Unknown backend → `ValueError`. |
-| `Backend` | `StrEnum` with `REST` / `GRAPHQL`. |
+| `list_releases(owner, repo, *, backend=Backend.REST, ...)` | GitHub source (also `github.list_releases`). Single router over REST + GraphQL. Accepts `Backend` enum or raw string. Unknown backend → `ValueError`. |
+| `gitlab.list_releases(namespace, project, *, host="https://gitlab.com", include_prereleases=True, ...)` | GitLab source. REST only. Self-hosted via `host=`. No `draft`/`backend` params. |
+| `Backend` | `StrEnum` with `REST` / `GRAPHQL` (GitHub). |
 | `Asset`, `Release` | Frozen dataclasses; assume forward-additive fields. |
 | `extract_urls(text)` | Returns deduplicated `list[str]`. |
 | `FileCache(domain, *, max_age=…)` | Threadsafe-ish on a single host; not safe across machines. |
