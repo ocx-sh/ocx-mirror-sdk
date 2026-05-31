@@ -10,6 +10,7 @@ underscored module paths is package-private and may change without notice.
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
+from ocx_mirror_sdk import github, gitlab
 from ocx_mirror_sdk.cache import FileCache, configure
 from ocx_mirror_sdk.errors import (
     ApiResponseError,
@@ -54,5 +55,7 @@ __all__ = [
     "__version__",
     "configure",
     "extract_urls",
+    "github",
+    "gitlab",
     "list_releases",
 ]

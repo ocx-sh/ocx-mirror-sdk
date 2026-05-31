@@ -1,6 +1,19 @@
 # Fetching releases
 
-`list_releases(owner, repo, *, backend=Backend.REST, ...)` is the only
+Each release source has its own entry point in a provider namespace:
+
+| Source | Call | Transports |
+|---|---|---|
+| GitHub | `list_releases` / `github.list_releases` | REST + GraphQL (`backend=`) |
+| GitLab | `gitlab.list_releases` | REST |
+
+All of them return the same source-agnostic
+[`Release`](../api/releases.md#release) objects, so the rest of your generator
+(filtering, `IndexBuilder`) is identical regardless of source.
+
+## GitHub
+
+`list_releases(owner, repo, *, backend=Backend.REST, ...)` is the GitHub
 entry point. The `backend` kwarg picks between two implementations.
 
 ## REST vs GraphQL
@@ -69,3 +82,40 @@ list_releases(
 ```
 
 REST has an analogous `session=github3.GitHub | None` hook.
+
+## GitLab
+
+`gitlab.list_releases(namespace, project, *, host="https://gitlab.com", ...)`
+fetches releases from the GitLab REST API (`httpx`, no extra dependency).
+
+```python
+from ocx_mirror_sdk import gitlab
+
+# gitlab.com
+releases = gitlab.list_releases("gitlab-org", "gitlab-runner")
+
+# self-hosted instance
+releases = gitlab.list_releases("group", "project", host="https://gitlab.example.com")
+
+# nested subgroups go in the namespace
+releases = gitlab.list_releases("group/subgroup", "project")
+```
+
+| | GitLab REST |
+|---|---|
+| Library | `httpx` |
+| Auth | Optional `GITLAB_TOKEN` (sent as `PRIVATE-TOKEN`); anonymous works on public projects |
+| Self-hosted | `host=` (default `https://gitlab.com`) |
+| Release notes (`body`) | Yes (`description`) |
+| Release list TTL | 1 h |
+
+Field mapping into [`Release`](../api/releases.md#release):
+
+- `prerelease` ← GitLab's `upcoming_release` flag.
+- `draft` is always `False` — GitLab has no draft releases, so
+  `include_drafts` is not a parameter here.
+- `assets` ← author-curated `assets.links` (preferring `direct_asset_url`).
+  Auto-generated source archives (`assets.sources`) are not included.
+
+`include_prereleases=False` and dependency injection (`cache=`, `client=`)
+work exactly as on the GitHub side.

@@ -65,6 +65,16 @@ for r in releases:
 builder.emit()  # writes JSON to stdout
 ```
 
+Releases hosted on GitLab use the sibling `gitlab` namespace — same `Release`
+objects, same `IndexBuilder`:
+
+```python
+from ocx_mirror_sdk import gitlab
+
+# gitlab.com (default); pass host="https://gitlab.example.com" for self-hosted
+releases = gitlab.list_releases("gitlab-org", "gitlab-runner")
+```
+
 More worked examples live under [`examples/`](examples/) and at <https://docs.ocx.sh/sdk/mirror/recipes/>.
 
 ## Public API
@@ -72,9 +82,10 @@ More worked examples live under [`examples/`](examples/) and at <https://docs.oc
 | Symbol | Purpose |
 |---|---|
 | `IndexBuilder` | Typed builder for the `url_index` JSON manifest |
-| `list_releases` | Iterate GitHub releases — single router over REST and GraphQL |
-| `Backend` | `StrEnum`: `REST` / `GRAPHQL` backend selector |
-| `Asset`, `Release` | Typed views of release assets and releases |
+| `list_releases` / `github.list_releases` | Iterate GitHub releases — single router over REST and GraphQL |
+| `gitlab.list_releases` | Iterate GitLab releases — REST; gitlab.com or self-hosted via `host=` |
+| `Backend` | `StrEnum`: `REST` / `GRAPHQL` backend selector (GitHub) |
+| `Asset`, `Release` | Source-agnostic typed views of release assets and releases |
 | `extract_urls` | Pull download URLs from release notes |
 | `FileCache`, `configure` | Disk-backed HTTP response cache; SDK-wide root override |
 

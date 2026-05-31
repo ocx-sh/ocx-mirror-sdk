@@ -7,8 +7,14 @@ Notable releases:
 
 ## Unreleased
 
-_Add user-facing changes here as they land. Before tagging, rename this
-heading to `## vX.Y.Z — <name>` and add the release date._
+- **New**: GitLab release source. `gitlab.list_releases(namespace, project, *,
+  host="https://gitlab.com", include_prereleases=True, ...)` fetches releases
+  from gitlab.com or a self-hosted instance via the REST API (no new
+  dependency). Returns the same `Release`/`Asset` objects as the GitHub source.
+- **New**: `http.fetch_json` accepts an optional `headers=` argument.
+- **Internal**: the shared fetch/deserialize/filter pipeline moved from
+  `github/_pipeline.py` to `ocx_mirror_sdk/_pipeline.py` (now used by both
+  providers). No public-API change.
 
 ## v0.3.0 — Maturity pass
 

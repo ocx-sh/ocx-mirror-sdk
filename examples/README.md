@@ -20,6 +20,7 @@ uv run https://raw.githubusercontent.com/ocx-sh/ocx-mirror-sdk/main/examples/01_
 | [`03_extract_urls_notes.py`](03_extract_urls_notes.py) | Pulling URLs out of release-note bodies with `extract_urls` |
 | [`04_combined_index.py`](04_combined_index.py) | Full pipeline: fetch → filter → extract → build → emit |
 | [`05_error_handling.py`](05_error_handling.py) | Handling the `OcxMirrorError` hierarchy in a generator |
+| [`06_gitlab_rest.py`](06_gitlab_rest.py) | GitLab release source — `gitlab.list_releases` (gitlab.com or self-hosted) |
 
 All scripts pin `ocx-mirror-sdk` to a tag. Bump the tag when consuming
 a newer release.

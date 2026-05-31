@@ -45,11 +45,17 @@ def _wrap_status(exc: httpx.HTTPStatusError) -> HttpStatusError:
     )
 
 
-def fetch_json(url: str, *, client: httpx.Client | None = None) -> Any:
+def fetch_json(
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    client: httpx.Client | None = None,
+) -> Any:
     """Fetch a URL and parse the response as JSON.
 
     Args:
         url: Target URL.
+        headers: Optional request headers (e.g. ``PRIVATE-TOKEN``).
         client: Optional injected client. Defaults to the module-level
             singleton (lazy-initialized with sane retry / timeout). Tests
             should pass ``httpx.Client(transport=httpx.MockTransport(...))``.
@@ -60,7 +66,7 @@ def fetch_json(url: str, *, client: httpx.Client | None = None) -> Any:
         ApiResponseError: Body was not valid JSON.
     """
     try:
-        response = (client or _get_client()).get(url)
+        response = (client or _get_client()).get(url, headers=headers)
         response.raise_for_status()
     except httpx.TimeoutException as e:
         raise HttpTimeoutError(url=url) from e

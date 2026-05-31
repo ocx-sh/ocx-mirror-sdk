@@ -31,6 +31,22 @@ def test_fetch_json_returns_parsed_body():
     assert body == {"hello": "world"}
 
 
+def test_fetch_json_passes_headers_to_request():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, json=[])
+
+    http.fetch_json(
+        "https://api.example.com/x",
+        headers={"PRIVATE-TOKEN": "secret"},
+        client=_make_client(handler),
+    )
+
+    assert captured["headers"]["private-token"] == "secret"
+
+
 def test_fetch_json_raises_http_status_error_on_4xx():
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={"error": "not found"})
