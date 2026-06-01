@@ -1,9 +1,9 @@
 # Quickstart
 
 ```python
-from ocx_mirror_sdk import Backend, IndexBuilder, list_releases
+from ocx_mirror_sdk import IndexBuilder, github
 
-releases = list_releases("shellcheck", "shellcheck")
+releases = github.list_releases("shellcheck/shellcheck")
 
 builder = IndexBuilder()
 for r in releases:
@@ -34,9 +34,9 @@ The first run hits GitHub's API; the second is served from
 GraphQL backend:
 
 ```python
-releases = list_releases(
-    "astral-sh", "python-build-standalone",
-    backend=Backend.GRAPHQL,
+releases = github.list_releases(
+    "astral-sh/python-build-standalone",
+    backend=github.Backend.GRAPHQL,
 )
 ```
 

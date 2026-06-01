@@ -20,10 +20,10 @@ OcxMirrorError
 ## The catch-all
 
 ```python
-from ocx_mirror_sdk import OcxMirrorError, list_releases
+from ocx_mirror_sdk import OcxMirrorError, github
 
 try:
-    releases = list_releases("o", "r")
+    releases = github.list_releases("o/r")
 except OcxMirrorError as e:
     log.warning("SDK call failed: %s", e)
     raise
@@ -33,11 +33,11 @@ except OcxMirrorError as e:
 
 ```python
 from ocx_mirror_sdk import (
-    ConfigurationError, ApiResponseError, TransportError, HttpStatusError,
+    ConfigurationError, ApiResponseError, TransportError, HttpStatusError, github,
 )
 
 try:
-    releases = list_releases("o", "r")
+    releases = github.list_releases("o/r")
 except ConfigurationError as e:
     # Bad config — surface to user, do not retry
     sys.exit(64)  # EX_USAGE
@@ -65,7 +65,7 @@ the original. Inspect via `exc.__cause__`:
 
 ```python
 try:
-    list_releases("o", "r")
+    github.list_releases("o/r")
 except HttpStatusError as e:
     print(e.__cause__)  # httpx.HTTPStatusError(...)
 ```
@@ -79,7 +79,7 @@ permission denied).
 ## What the SDK never raises
 
 - Stdlib exceptions like bare `ValueError`, `RuntimeError`, `KeyError`
-  from inside SDK code (`Backend("foo")` is the one deliberate
+  from inside SDK code (`github.Backend("foo")` is the one deliberate
   exception — `ValueError` from the stdlib `StrEnum` constructor).
 - `httpx.HTTPStatusError`, `httpx.TimeoutException`, `httpx.RequestError`.
 - `json.JSONDecodeError`.

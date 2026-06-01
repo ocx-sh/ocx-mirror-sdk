@@ -21,7 +21,7 @@ inline-metadata lets you declare dependencies inside the script itself —
 # ]
 # ///
 
-from ocx_mirror_sdk import IndexBuilder, list_releases, Backend
+from ocx_mirror_sdk import IndexBuilder, github
 ```
 
 Run it directly:

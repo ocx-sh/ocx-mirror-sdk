@@ -23,7 +23,7 @@ In a [PEP 723](https://peps.python.org/pep-0723/) inline-metadata script (recomm
 # ]
 # ///
 
-from ocx_mirror_sdk import IndexBuilder, list_releases, Backend
+from ocx_mirror_sdk import IndexBuilder, github
 ```
 
 Or in a project `pyproject.toml`:
@@ -45,13 +45,13 @@ asset from the GitHub Release — see the
 ## Quickstart
 
 ```python
-from ocx_mirror_sdk import Backend, IndexBuilder, list_releases
+from ocx_mirror_sdk import IndexBuilder, github
 
 # Fetch releases (REST default; switch to GraphQL on big repos)
-releases = list_releases("shellcheck", "shellcheck")
+releases = github.list_releases("shellcheck/shellcheck")
 
 # Or explicitly:
-releases = list_releases("indygreg", "python-build-standalone", backend=Backend.GRAPHQL)
+releases = github.list_releases("indygreg/python-build-standalone", backend=github.Backend.GRAPHQL)
 
 # Build a url_index document
 builder = IndexBuilder()
@@ -72,7 +72,7 @@ objects, same `IndexBuilder`:
 from ocx_mirror_sdk import gitlab
 
 # gitlab.com (default); pass host="https://gitlab.example.com" for self-hosted
-releases = gitlab.list_releases("gitlab-org", "gitlab-runner")
+releases = gitlab.list_releases("gitlab-org/gitlab-runner")
 ```
 
 More worked examples live under [`examples/`](examples/) and at <https://docs.ocx.sh/sdk/mirror/recipes/>.
@@ -82,9 +82,9 @@ More worked examples live under [`examples/`](examples/) and at <https://docs.oc
 | Symbol | Purpose |
 |---|---|
 | `IndexBuilder` | Typed builder for the `url_index` JSON manifest |
-| `list_releases` / `github.list_releases` | Iterate GitHub releases — single router over REST and GraphQL |
-| `gitlab.list_releases` | Iterate GitLab releases — REST; gitlab.com or self-hosted via `host=` |
-| `Backend` | `StrEnum`: `REST` / `GRAPHQL` backend selector (GitHub) |
+| `github.list_releases` | Iterate GitHub releases — single router over REST and GraphQL; takes a `"owner/repo"` slug |
+| `gitlab.list_releases` | Iterate GitLab releases — REST; gitlab.com or self-hosted via `host=`; takes a `"namespace/project"` slug |
+| `github.Backend` | `StrEnum`: `REST` / `GRAPHQL` backend selector (GitHub) |
 | `Asset`, `Release` | Source-agnostic typed views of release assets and releases |
 | `extract_urls` | Pull download URLs from release notes |
 | `FileCache`, `configure` | Disk-backed HTTP response cache; SDK-wide root override |

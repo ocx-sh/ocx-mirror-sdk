@@ -9,7 +9,8 @@ Auto-generated from docstrings via
 |---|---|---|
 | `IndexBuilder` | `ocx_mirror_sdk.index` | [IndexBuilder](index-builder.md) |
 | `Asset`, `Release` | `ocx_mirror_sdk.releases` | [Releases](releases.md) |
-| `list_releases`, `Backend` | `ocx_mirror_sdk.github` | [Releases](releases.md) |
+| `github.list_releases`, `github.Backend` | `ocx_mirror_sdk.github` | [Releases](releases.md) |
+| `gitlab.list_releases` | `ocx_mirror_sdk.gitlab` | [Releases](releases.md) |
 | `FileCache`, `configure` | `ocx_mirror_sdk.cache` | [Cache](cache.md) |
 | `fetch_json`, `fetch_text`, `post_json` | `ocx_mirror_sdk.http` | [HTTP](http.md) |
 | `extract_urls` | `ocx_mirror_sdk.text` | [Text](text.md) |
@@ -18,7 +19,9 @@ Auto-generated from docstrings via
 ## Conventions
 
 - All names exported from `ocx_mirror_sdk` are public; anything under
-  `ocx_mirror_sdk.<module>._foo` is package-private.
+  `ocx_mirror_sdk.<module>._foo` is package-private. Release sources live in
+  the `github` and `gitlab` subpackages — call them as
+  `github.list_releases(...)` / `gitlab.list_releases(...)`.
 - Docstrings follow [Google style](https://google.github.io/styleguide/pyguide.html#383-functions-and-methods).
 - `Raises:` sections list every exception the function may raise from
   the SDK's hierarchy; lower-layer exceptions are wrapped (preserved on

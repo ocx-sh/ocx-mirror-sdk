@@ -4,7 +4,7 @@ Each release source has its own entry point in a provider namespace:
 
 | Source | Call | Transports |
 |---|---|---|
-| GitHub | `list_releases` / `github.list_releases` | REST + GraphQL (`backend=`) |
+| GitHub | `github.list_releases` | REST + GraphQL (`backend=`) |
 | GitLab | `gitlab.list_releases` | REST |
 
 All of them return the same source-agnostic
@@ -13,8 +13,8 @@ All of them return the same source-agnostic
 
 ## GitHub
 
-`list_releases(owner, repo, *, backend=Backend.REST, ...)` is the GitHub
-entry point. The `backend` kwarg picks between two implementations.
+`github.list_releases("owner/repo", *, backend=github.Backend.REST, ...)` is the
+GitHub entry point. The `backend` kwarg picks between two implementations.
 
 ## REST vs GraphQL
 
@@ -46,9 +46,9 @@ entry point. The `backend` kwarg picks between two implementations.
 The enum and raw strings both work:
 
 ```python
-list_releases("o", "r", backend=Backend.GRAPHQL)
-list_releases("o", "r", backend="graphql")          # equivalent
-list_releases("o", "r", backend="foo")              # ValueError
+github.list_releases("o/r", backend=github.Backend.GRAPHQL)
+github.list_releases("o/r", backend="graphql")          # equivalent
+github.list_releases("o/r", backend="foo")              # ValueError
 ```
 
 Unknown backend values are rejected by the `Backend` constructor —
@@ -61,7 +61,7 @@ returned list. Filters are applied **after** the cache, so changing
 them doesn't invalidate the cache or force a refetch:
 
 ```python
-list_releases("o", "r", include_prereleases=False)
+github.list_releases("o/r", include_prereleases=False)
 ```
 
 ## Dependency injection
@@ -74,9 +74,9 @@ import httpx
 def handler(request):
     return httpx.Response(200, json={...})
 
-list_releases(
-    "o", "r",
-    backend=Backend.GRAPHQL,
+github.list_releases(
+    "o/r",
+    backend=github.Backend.GRAPHQL,
     client=httpx.Client(transport=httpx.MockTransport(handler)),
 )
 ```
@@ -85,20 +85,20 @@ REST has an analogous `session=github3.GitHub | None` hook.
 
 ## GitLab
 
-`gitlab.list_releases(namespace, project, *, host="https://gitlab.com", ...)`
+`gitlab.list_releases("namespace/project", *, host="https://gitlab.com", ...)`
 fetches releases from the GitLab REST API (`httpx`, no extra dependency).
 
 ```python
 from ocx_mirror_sdk import gitlab
 
 # gitlab.com
-releases = gitlab.list_releases("gitlab-org", "gitlab-runner")
+releases = gitlab.list_releases("gitlab-org/gitlab-runner")
 
 # self-hosted instance
-releases = gitlab.list_releases("group", "project", host="https://gitlab.example.com")
+releases = gitlab.list_releases("group/project", host="https://gitlab.example.com")
 
-# nested subgroups go in the namespace
-releases = gitlab.list_releases("group/subgroup", "project")
+# nested subgroups go in the namespace; the final segment is the project
+releases = gitlab.list_releases("group/subgroup/project")
 ```
 
 | | GitLab REST |

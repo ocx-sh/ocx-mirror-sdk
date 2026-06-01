@@ -7,7 +7,11 @@ Notable releases:
 
 ## Unreleased
 
-- **New**: GitLab release source. `gitlab.list_releases(namespace, project, *,
+- **Breaking**: top-level `list_releases` and `Backend` removed. Use
+  `github.list_releases("owner/repo")` / `github.Backend`. Both GitHub and
+  GitLab `list_releases` now take a single `"namespace/project"` path slug
+  instead of separate args.
+- **New**: GitLab release source. `gitlab.list_releases("namespace/project", *,
   host="https://gitlab.com", include_prereleases=True, ...)` fetches releases
   from gitlab.com or a self-hosted instance via the REST API (no new
   dependency). Returns the same `Release`/`Asset` objects as the GitHub source.

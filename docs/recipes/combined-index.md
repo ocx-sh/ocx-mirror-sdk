@@ -18,7 +18,7 @@ uv run examples/04_combined_index.py > bun.json
 
 This is the canonical "real" generator. The pieces:
 
-1. **Fetch** — `list_releases(...)`, filtered to stable.
+1. **Fetch** — `github.list_releases(...)`, filtered to stable.
 2. **Discriminate** — asset-name regex picks the structured assets we
    want to publish.
 3. **Fallback** — if structured assets are absent, `extract_urls` on

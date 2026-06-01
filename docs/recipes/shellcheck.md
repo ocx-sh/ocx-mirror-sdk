@@ -19,7 +19,7 @@ uv run examples/01_shellcheck_rest.py > shellcheck.json
 
 ## What to change for your tool
 
-- `("koalaman", "shellcheck")` → your `(owner, repo)`.
+- `"koalaman/shellcheck"` → your `"owner/repo"`.
 - `r.tag_name.lstrip("v")` → whatever version-string mangling your tool
   needs.
 - Add `pattern=` filtering, asset-name regexes, etc. as needed.

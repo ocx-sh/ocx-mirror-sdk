@@ -1,8 +1,9 @@
 # Caching
 
 The SDK caches API responses on disk so repeat runs of a generator are
-cheap. You usually don't need to touch the cache directly — `list_releases`
-handles it transparently. This page covers the cases where you do.
+cheap. You usually don't need to touch the cache directly —
+`github.list_releases` handles it transparently. This page covers the cases
+where you do.
 
 ## Default behavior
 
@@ -30,10 +31,10 @@ materializes after the call. Call it once at script start.
 Pass `cache=` to disable caching for a specific call:
 
 ```python
-from ocx_mirror_sdk import FileCache, list_releases
+from ocx_mirror_sdk import FileCache, github
 
 # Force a fresh fetch — TTL=0 means "always miss, never store"
-list_releases("o", "r", cache=FileCache("github", max_age=0))
+github.list_releases("o/r", cache=FileCache("github", max_age=0))
 ```
 
 ## Invalidation

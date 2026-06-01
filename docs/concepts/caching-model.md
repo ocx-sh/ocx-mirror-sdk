@@ -1,8 +1,8 @@
 # Caching model
 
-`FileCache` is a thin TTL-based disk cache. It sits between `list_releases`
-and the GitHub API so repeat runs of a generator (e.g. during local
-development) don't burn the rate limit.
+`FileCache` is a thin TTL-based disk cache. It sits between
+`github.list_releases` and the GitHub API so repeat runs of a generator
+(e.g. during local development) don't burn the rate limit.
 
 ## What gets cached
 
@@ -33,7 +33,7 @@ configure(cache_root=Path(".cache/ocx-mirror-sdk"))
 ## Cache miss is normal
 
 `FileCache.get()` returns `None` on miss. Generators don't need to handle
-the miss explicitly — `list_releases` does. The cache only raises
+the miss explicitly — `github.list_releases` does. The cache only raises
 `CacheError` if the on-disk file exists but cannot be read or is corrupt
 JSON (a genuinely abnormal event).
 

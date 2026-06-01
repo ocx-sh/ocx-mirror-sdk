@@ -55,14 +55,14 @@ document. This SDK provides the typed building blocks for those generators.
 
 ```python
 from ocx_mirror_sdk import (
-    Backend, IndexBuilder, list_releases, extract_urls,
+    IndexBuilder, github, extract_urls,
     Asset, Release, FileCache, configure,
     OcxMirrorError, HttpStatusError, ApiResponseError,
 )
 
-releases = list_releases("shellcheck", "shellcheck")
+releases = github.list_releases("shellcheck/shellcheck")
 # Or, on a big repo:
-releases = list_releases("astral-sh", "python-build-standalone", backend=Backend.GRAPHQL)
+releases = github.list_releases("astral-sh/python-build-standalone", backend=github.Backend.GRAPHQL)
 
 builder = IndexBuilder()
 for r in releases:

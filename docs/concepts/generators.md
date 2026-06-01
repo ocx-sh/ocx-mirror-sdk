@@ -16,7 +16,7 @@ flowchart LR
 
 Everything upstream of the JSON document is the SDK's job:
 
-- Authenticated fetching with rate-limit-aware retries (`list_releases`).
+- Authenticated fetching with rate-limit-aware retries (`github.list_releases`).
 - Disk caching to make repeat runs cheap (`FileCache`).
 - Filtering prereleases / drafts (`include_prereleases=`, `include_drafts=`).
 - URL extraction from prose-only release notes (`extract_urls`).

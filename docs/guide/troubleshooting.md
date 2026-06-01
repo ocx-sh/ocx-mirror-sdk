@@ -2,7 +2,7 @@
 
 ## `ConfigurationError: GITHUB_TOKEN is required`
 
-You're using `Backend.GRAPHQL`. The GraphQL API has no anonymous access.
+You're using `github.Backend.GRAPHQL`. The GraphQL API has no anonymous access.
 
 Fix:
 
@@ -23,7 +23,7 @@ REST gateway-timeouted on a repo with many assets per release. Switch
 to GraphQL:
 
 ```python
-list_releases("o", "r", backend=Backend.GRAPHQL)
+github.list_releases("o/r", backend=github.Backend.GRAPHQL)
 ```
 
 ## `HttpStatusError: HTTP 403 for https://api.github.com/...` (rate limit)
@@ -52,9 +52,9 @@ rm -rf ~/.cache/ocx-mirror-sdk/github/owner/repo
 Or per-call:
 
 ```python
-from ocx_mirror_sdk import FileCache, list_releases
+from ocx_mirror_sdk import FileCache, github
 
-list_releases("o", "r", cache=FileCache("github", max_age=0))
+github.list_releases("o/r", cache=FileCache("github", max_age=0))
 ```
 
 ## `mkdocstrings` complains about `_schema.py` during docs build
@@ -70,6 +70,7 @@ Bump the tag — see the [release notes](https://github.com/ocx-sh/ocx-mirror-sd
 
 | Symptom | Tag you need |
 |---|---|
-| Can't import `Backend` | ≥ v0.3.0 |
+| Can't import `Backend` | moved to the `github` subpackage — use `github.Backend` |
+| Can't import top-level `list_releases` | moved to the `github` subpackage — use `github.list_releases("owner/repo")` |
 | Can't import `OcxMirrorError` | ≥ v0.3.0 |
-| `list_releases_graphql` removed | upgraded to v0.3.0 — use `list_releases(..., backend=Backend.GRAPHQL)` |
+| `list_releases_graphql` removed | upgraded to v0.3.0 — use `github.list_releases("owner/repo", backend=github.Backend.GRAPHQL)` |
