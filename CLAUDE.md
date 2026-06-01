@@ -13,9 +13,10 @@ The entire repository is the SDK — there are no subsystems. See `.claude/rules
 | Symbol | Purpose |
 |---|---|
 | `IndexBuilder` | Typed builder for the `url_index` JSON manifest |
-| `list_releases` | Iterate GitHub releases via REST (`github3.py`) |
-| `list_releases_graphql` | Iterate GitHub releases via GraphQL (use on large repos that 504 on REST) |
-| `Asset`, `Release` | Typed views of GitHub release assets |
+| `github.list_releases` | Iterate GitHub releases (REST or GraphQL via `backend=`); takes a `"owner/repo"` slug |
+| `github.Backend` | `StrEnum` backend selector (`REST` / `GRAPHQL`) for the GitHub source |
+| `gitlab.list_releases` | Iterate GitLab releases via REST; takes a `"namespace/project"` slug |
+| `Asset`, `Release` | Source-agnostic typed views of release assets and releases |
 | `extract_urls` | Pull download URLs from release notes |
 | `FileCache` | Disk-backed HTTP response cache, 1h default TTL |
 

@@ -45,7 +45,7 @@ class Backend(StrEnum):
     REST = "rest"
     GRAPHQL = "graphql"
 
-def list_releases(owner: str, repo: str, *, backend: Backend | str = Backend.REST) -> ...:
+def list_releases(path: str, *, backend: Backend | str = Backend.REST) -> ...:
     backend = Backend(backend)   # accepts "graphql" or Backend.GRAPHQL; rejects "foo"
     ...
 ```

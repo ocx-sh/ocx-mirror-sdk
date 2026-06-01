@@ -81,7 +81,7 @@ def test_filter_releases_excludes_prereleases():
 
 ```python
 with pytest.raises(ValueError, match="GITHUB_TOKEN is required"):
-    list_releases_graphql("o", "r")
+    github.list_releases("o/r", backend=github.Backend.GRAPHQL)
 ```
 
 ---
@@ -167,7 +167,7 @@ from tests._fakes import FakeFileCache
 def test_list_releases_caches_response():
     cache = FakeFileCache()
     ...
-    list_releases("o", "r", cache=cache)
+    github.list_releases("o/r", cache=cache)
     assert "o/r/releases" in cache.store
 ```
 
