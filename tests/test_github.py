@@ -11,8 +11,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ocx_mirror_sdk import Asset, ConfigurationError, list_releases
+from ocx_mirror_sdk import Asset, ConfigurationError
 from ocx_mirror_sdk.errors import ApiResponseError
+from ocx_mirror_sdk.github import list_releases
 from ocx_mirror_sdk.releases import Release
 
 
@@ -52,7 +53,7 @@ def test_list_releases_basic(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo")
+    results = list_releases("owner/repo")
 
     assert len(results) == 1
     r = results[0]
@@ -76,7 +77,7 @@ def test_list_releases_empty(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo")
+    results = list_releases("owner/repo")
     assert results == []
 
 
@@ -89,7 +90,7 @@ def test_list_releases_repo_not_found_raises_api_response_error(mock_login, mock
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
     with pytest.raises(ApiResponseError, match="repository not found"):
-        list_releases("owner", "nonexistent")
+        list_releases("owner/nonexistent")
 
 
 @patch("ocx_mirror_sdk.github._rest._cache")
@@ -105,7 +106,7 @@ def test_list_releases_prerelease_and_draft(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo")
+    results = list_releases("owner/repo")
     assert results[0].prerelease is True
     assert results[1].draft is True
 
@@ -123,7 +124,7 @@ def test_list_releases_null_body(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo")
+    results = list_releases("owner/repo")
     assert results[0].body == ""
 
 
@@ -143,7 +144,7 @@ def test_list_releases_multiple_assets(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo")
+    results = list_releases("owner/repo")
     assert len(results[0].assets) == 2
     names = {a.name for a in results[0].assets}
     assert names == {"tool-linux.tar.gz", "tool-darwin.tar.gz"}
@@ -162,7 +163,7 @@ def test_exclude_prereleases(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo", include_prereleases=False)
+    results = list_releases("owner/repo", include_prereleases=False)
     assert len(results) == 1
     assert results[0].tag_name == "v1.0.0"
 
@@ -180,7 +181,7 @@ def test_exclude_drafts(mock_login, mock_cache):
     mock_login.return_value = gh
     mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner", "repo", include_drafts=False)
+    results = list_releases("owner/repo", include_drafts=False)
     assert len(results) == 1
     assert results[0].tag_name == "v1.0.0"
 
@@ -189,7 +190,7 @@ def test_exclude_drafts(mock_login, mock_cache):
 def test_cache_key_format(mock_cache):
     mock_cache.fetch_json.return_value = []
 
-    list_releases("corretto", "corretto-21")
+    list_releases("corretto/corretto-21")
 
     mock_cache.fetch_json.assert_called_once()
     key = mock_cache.fetch_json.call_args[0][0]
@@ -200,7 +201,7 @@ def test_cache_key_format(mock_cache):
 def test_cache_key_ignores_filters(mock_cache):
     mock_cache.fetch_json.return_value = []
 
-    list_releases("o", "r", include_prereleases=False, include_drafts=False)
+    list_releases("o/r", include_prereleases=False, include_drafts=False)
 
     key = mock_cache.fetch_json.call_args[0][0]
     assert key == "o/r/releases"
@@ -210,7 +211,7 @@ def test_cache_key_ignores_filters(mock_cache):
 def test_list_releases_accepts_string_backend(mock_cache):
     """Backend may be passed as raw string (StrEnum drop-in)."""
     mock_cache.fetch_json.return_value = []
-    assert list_releases("o", "r", backend="rest") == []
+    assert list_releases("o/r", backend="rest") == []
 
 
 @patch("ocx_mirror_sdk.github._rest._cache")
@@ -224,7 +225,7 @@ def test_list_releases_session_kwarg_replaces_login(mock_cache):
     fake_session.repository.return_value = repo
 
     with patch("ocx_mirror_sdk.github._rest._login") as mock_login:
-        list_releases("o", "r", session=fake_session)
+        list_releases("o/r", session=fake_session)
 
     mock_login.assert_not_called()
     fake_session.repository.assert_called_once_with("o", "r")
@@ -232,7 +233,12 @@ def test_list_releases_session_kwarg_replaces_login(mock_cache):
 
 def test_list_releases_unknown_backend_raises_value_error():
     with pytest.raises(ValueError, match="'foo'"):
-        list_releases("o", "r", backend="foo")
+        list_releases("o/r", backend="foo")
+
+
+def test_list_releases_invalid_path_raises():
+    with pytest.raises(ValueError, match="github path must be 'owner/repo'"):
+        list_releases("just-owner")
 
 
 def test_release_round_trip():

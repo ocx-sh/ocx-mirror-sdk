@@ -57,9 +57,23 @@ def _normalize_release(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _split_project_path(path: str) -> tuple[str, str]:
+    """Split ``"namespace/project"`` into namespace + project.
+
+    The namespace may contain nested subgroups, so only the final segment is
+    treated as the project name.
+
+    Raises:
+        ValueError: *path* has fewer than two non-empty ``/``-separated segments.
+    """
+    parts = path.strip("/").split("/")
+    if len(parts) < 2 or not all(parts):
+        raise ValueError(f"gitlab path must be 'namespace/project', got {path!r}")
+    return "/".join(parts[:-1]), parts[-1]
+
+
 def list_releases(
-    namespace: str,
-    project: str,
+    path: str,
     *,
     host: str = DEFAULT_HOST,
     include_prereleases: bool = True,
@@ -69,9 +83,9 @@ def list_releases(
     """Return releases for a GitLab project as :class:`Release` objects.
 
     Args:
-        namespace: Project namespace. May contain nested subgroups
-            (e.g. ``"gitlab-org/security"``).
-        project: Project (repository) name.
+        path: Project path ``"namespace/project"``. The namespace may contain
+            nested subgroups (e.g. ``"gitlab-org/security/tooling"``); only the
+            final segment is the project name.
         host: GitLab instance base URL. Default: ``"https://gitlab.com"``.
             Set this for self-hosted instances (e.g. ``"https://gitlab.example.com"``).
         include_prereleases: If ``False``, upcoming (pre-)releases are excluded.
@@ -80,16 +94,18 @@ def list_releases(
             ``MockTransport`` client).
 
     Raises:
+        ValueError: ``path`` is not ``"namespace/project"``.
         TransportError: HTTP failure (e.g. ``HttpStatusError`` 404 when the
             project does not exist or is private).
         ApiResponseError: Server returned an unusable payload.
 
     Example:
         >>> from ocx_mirror_sdk import gitlab
-        >>> releases = gitlab.list_releases("gitlab-org", "gitlab-runner")  # doctest: +SKIP
+        >>> releases = gitlab.list_releases("gitlab-org/gitlab-runner")  # doctest: +SKIP
         >>> sorted({r.tag_name for r in releases})  # doctest: +SKIP
         ['v16.0.0', 'v16.1.0', ...]
     """
+    namespace, project = _split_project_path(path)
     try:
         return _do_list_releases(
             namespace,
@@ -100,7 +116,7 @@ def list_releases(
             client=client,
         )
     except OcxMirrorError as e:
-        log.warning("gitlab.list_releases(%s/%s @ %s) failed: %s", namespace, project, host, e)
+        log.warning("gitlab.list_releases(%s @ %s) failed: %s", path, host, e)
         raise
 
 

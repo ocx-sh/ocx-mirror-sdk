@@ -80,7 +80,7 @@ def _single_page(releases: list[dict]):
 def test_list_releases_maps_single_release_fields():
     handler = _single_page([_release("v1.0.0", description="notes", links=[_link("tool.tgz", "https://x/tool.tgz")])])
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert len(result) == 1
     rel = result[0]
@@ -96,7 +96,7 @@ def test_list_releases_prefers_direct_asset_url_over_url():
         [_release("v1", links=[_link("tool.tgz", "https://x/raw", direct="https://x/direct")])],
     )
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert result[0].assets[0].browser_download_url == "https://x/direct"
 
@@ -104,7 +104,7 @@ def test_list_releases_prefers_direct_asset_url_over_url():
 def test_list_releases_falls_back_to_url_when_no_direct_asset_url():
     handler = _single_page([_release("v1", links=[_link("tool.tgz", "https://x/raw")])])
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert result[0].assets[0].browser_download_url == "https://x/raw"
 
@@ -112,7 +112,7 @@ def test_list_releases_falls_back_to_url_when_no_direct_asset_url():
 def test_list_releases_empty_links_yields_no_assets():
     handler = _single_page([_release("v1", links=[])])
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert result[0].assets == []
 
@@ -120,7 +120,7 @@ def test_list_releases_empty_links_yields_no_assets():
 def test_list_releases_maps_upcoming_release_to_prerelease():
     handler = _single_page([_release("v2-rc", upcoming=True)])
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert result[0].prerelease is True
 
@@ -128,7 +128,7 @@ def test_list_releases_maps_upcoming_release_to_prerelease():
 def test_list_releases_draft_is_always_false():
     handler = _single_page([_release("v1"), _release("v2-rc", upcoming=True)])
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert all(r.draft is False for r in result)
 
@@ -144,7 +144,7 @@ def test_list_releases_draft_is_always_false():
 def test_list_releases_normalizes_missing_description_to_empty_body(release):
     handler = _single_page([release])
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert result[0].body == ""
 
@@ -157,7 +157,7 @@ def test_list_releases_normalizes_missing_description_to_empty_body(release):
 def test_list_releases_excludes_prereleases_when_disabled():
     handler = _single_page([_release("v1"), _release("v2-rc", upcoming=True)])
 
-    result = gitlab.list_releases("o", "p", include_prereleases=False, client=_client(handler))
+    result = gitlab.list_releases("o/p", include_prereleases=False, client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1"]
 
@@ -178,7 +178,7 @@ def test_list_releases_paginates_until_short_page(monkeypatch):
         page = int(request.url.params.get("page", "1"))
         return httpx.Response(200, json=pages.get(page, []))
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1", "v2", "v3"]
 
@@ -194,7 +194,7 @@ def test_list_releases_stops_on_empty_trailing_page(monkeypatch):
         page = int(request.url.params.get("page", "1"))
         return httpx.Response(200, json=pages.get(page, []))
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1", "v2"]
 
@@ -208,7 +208,7 @@ def test_list_releases_warns_and_truncates_at_max_pages(monkeypatch, caplog):
         return httpx.Response(200, json=[_release(f"v{page}")])
 
     with caplog.at_level(logging.WARNING, logger="ocx_mirror_sdk.gitlab._rest"):
-        result = gitlab.list_releases("o", "p", client=_client(handler))
+        result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1", "v2"]
     assert "reached page limit" in caplog.text
@@ -226,7 +226,7 @@ def test_list_releases_uses_default_gitlab_com_host():
         seen.append(str(request.url))
         return httpx.Response(200, json=[])
 
-    gitlab.list_releases("o", "p", client=_client(handler))
+    gitlab.list_releases("o/p", client=_client(handler))
 
     assert seen[0].startswith("https://gitlab.com/api/v4/projects/o%2Fp/releases")
 
@@ -238,7 +238,7 @@ def test_list_releases_self_hosted_host_builds_url_and_cache_key(cache):
         seen.append(request.url)
         return httpx.Response(200, json=[_release("v1")])
 
-    gitlab.list_releases("grp", "proj", host="https://gitlab.example.com", client=_client(handler))
+    gitlab.list_releases("grp/proj", host="https://gitlab.example.com", client=_client(handler))
 
     assert seen[0].host == "gitlab.example.com"
     assert str(seen[0]).startswith("https://gitlab.example.com/api/v4/projects/grp%2Fproj/releases")
@@ -252,7 +252,7 @@ def test_list_releases_encodes_subgroup_path():
         seen.append(str(request.url))
         return httpx.Response(200, json=[])
 
-    gitlab.list_releases("grp/sub", "proj", client=_client(handler))
+    gitlab.list_releases("grp/sub/proj", client=_client(handler))
 
     assert "projects/grp%2Fsub%2Fproj/releases" in seen[0]
 
@@ -265,7 +265,7 @@ def test_list_releases_sends_private_token_header_when_env_set(monkeypatch):
         seen.append(request.headers)
         return httpx.Response(200, json=[])
 
-    gitlab.list_releases("o", "p", client=_client(handler))
+    gitlab.list_releases("o/p", client=_client(handler))
 
     assert seen[0]["private-token"] == "secret-token"
 
@@ -278,7 +278,7 @@ def test_list_releases_uses_job_token_header_in_ci(monkeypatch):
         seen.append(request.headers)
         return httpx.Response(200, json=[])
 
-    gitlab.list_releases("o", "p", client=_client(handler))
+    gitlab.list_releases("o/p", client=_client(handler))
 
     assert seen[0]["job-token"] == "ci-job-token"
     assert "private-token" not in seen[0]
@@ -293,7 +293,7 @@ def test_list_releases_prefers_private_token_over_job_token(monkeypatch):
         seen.append(request.headers)
         return httpx.Response(200, json=[])
 
-    gitlab.list_releases("o", "p", client=_client(handler))
+    gitlab.list_releases("o/p", client=_client(handler))
 
     assert seen[0]["private-token"] == "personal-token"
     assert "job-token" not in seen[0]
@@ -306,7 +306,7 @@ def test_list_releases_omits_token_header_when_absent():
         seen.append(request.headers)
         return httpx.Response(200, json=[])
 
-    gitlab.list_releases("o", "p", client=_client(handler))
+    gitlab.list_releases("o/p", client=_client(handler))
 
     assert "private-token" not in seen[0]
     assert "job-token" not in seen[0]
@@ -322,7 +322,7 @@ def test_list_releases_raises_http_status_error_on_404():
         return httpx.Response(404, json={"message": "404 Project Not Found"})
 
     with pytest.raises(HttpStatusError, match="HTTP 404"):
-        gitlab.list_releases("o", "missing", client=_client(handler))
+        gitlab.list_releases("o/missing", client=_client(handler))
 
 
 def test_list_releases_http_status_error_chains_to_httpx():
@@ -330,7 +330,7 @@ def test_list_releases_http_status_error_chains_to_httpx():
         return httpx.Response(503, text="upstream")
 
     with pytest.raises(HttpStatusError) as exc_info:
-        gitlab.list_releases("o", "p", client=_client(handler))
+        gitlab.list_releases("o/p", client=_client(handler))
 
     assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
     assert exc_info.value.status_code == 503
@@ -341,7 +341,7 @@ def test_list_releases_raises_http_timeout_error():
         raise httpx.ConnectTimeout("timeout")
 
     with pytest.raises(HttpTimeoutError):
-        gitlab.list_releases("o", "p", client=_client(handler))
+        gitlab.list_releases("o/p", client=_client(handler))
 
 
 def test_list_releases_raises_api_response_error_on_non_list_payload():
@@ -349,7 +349,12 @@ def test_list_releases_raises_api_response_error_on_non_list_payload():
         return httpx.Response(200, json={"message": "unexpected object"})
 
     with pytest.raises(ApiResponseError, match="not a JSON array"):
-        gitlab.list_releases("o", "p", client=_client(handler))
+        gitlab.list_releases("o/p", client=_client(handler))
+
+
+def test_list_releases_invalid_path_raises():
+    with pytest.raises(ValueError, match="gitlab path must be 'namespace/project'"):
+        gitlab.list_releases("solo")
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +379,7 @@ def test_list_releases_cache_hit_skips_http(cache):
     def handler(_request: httpx.Request) -> httpx.Response:
         raise AssertionError("HTTP must not be called on cache hit")
 
-    result = gitlab.list_releases("o", "p", client=_client(handler))
+    result = gitlab.list_releases("o/p", client=_client(handler))
 
     assert [r.tag_name for r in result] == ["v1"]
     assert result[0].assets[0].name == "cached.tgz"

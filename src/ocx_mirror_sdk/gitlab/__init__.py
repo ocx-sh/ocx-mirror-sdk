@@ -3,9 +3,9 @@
 
 """GitLab release source — REST backend.
 
-Sibling to :mod:`ocx_mirror_sdk.github`. Use ``gitlab.list_releases(namespace,
-project, *, host=...)`` to fetch releases from gitlab.com or a self-hosted
-GitLab instance. Returns the same source-agnostic :class:`~ocx_mirror_sdk.Release`
+Sibling to :mod:`ocx_mirror_sdk.github`. Use ``gitlab.list_releases("namespace/project",
+*, host=...)`` to fetch releases from gitlab.com or a self-hosted GitLab
+instance. Returns the same source-agnostic :class:`~ocx_mirror_sdk.Release`
 objects as the GitHub source.
 """
 

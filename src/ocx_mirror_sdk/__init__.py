@@ -22,7 +22,6 @@ from ocx_mirror_sdk.errors import (
     SchemaError,
     TransportError,
 )
-from ocx_mirror_sdk.github import Backend, list_releases
 from ocx_mirror_sdk.index import IndexBuilder
 from ocx_mirror_sdk.releases import Asset, Release
 from ocx_mirror_sdk.text import extract_urls
@@ -41,7 +40,6 @@ __version__ = _resolve_version()
 __all__ = [
     "ApiResponseError",
     "Asset",
-    "Backend",
     "CacheError",
     "ConfigurationError",
     "FileCache",
@@ -57,5 +55,4 @@ __all__ = [
     "extract_urls",
     "github",
     "gitlab",
-    "list_releases",
 ]
