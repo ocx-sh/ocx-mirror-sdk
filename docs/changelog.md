@@ -5,7 +5,7 @@ For the authoritative changelog, see the
 
 Notable releases:
 
-## Unreleased
+## v0.4.0 — GitLab + scoped sources (2026-06-01)
 
 - **Breaking**: top-level `list_releases` and `Backend` removed. Use
   `github.list_releases("owner/repo")` / `github.Backend`. Both GitHub and
