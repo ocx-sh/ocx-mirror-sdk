@@ -11,6 +11,8 @@ asset lists cached per release for 7d (assets are immutable).
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -28,6 +30,51 @@ _releases_cache = FileCache("github-graphql")
 _assets_cache = FileCache("github-graphql-assets", max_age=7 * 86400)
 
 _GRAPHQL_URL = "https://api.github.com/graphql"
+
+# GitHub returns HTTP 200 with an ``errors`` array (not a 5xx) when a GraphQL
+# query times out on its side — common on repos with thousands of release
+# assets (python-build-standalone). These are idempotent reads, so retry the
+# transient subset with exponential backoff before surfacing the failure.
+_MAX_GRAPHQL_ATTEMPTS = 4
+_GRAPHQL_RETRY_BACKOFF_BASE = 1.0  # seconds; sleep = base * 2**attempt
+
+# Substrings (matched case-insensitively against each error ``message``) that
+# mark a GraphQL error as a transient server-side failure safe to retry. Hard
+# errors — NOT_FOUND, validation, auth, rate-limit — are intentionally absent
+# so they surface immediately as a non-retryable ApiResponseError.
+_TRANSIENT_GRAPHQL_MARKERS = (
+    "something went wrong while executing your query",
+    "timeout",
+    "timed out",
+    "temporarily unavailable",
+    "please try again",
+)
+
+# Sleep seam — module attribute so tests can swap it for a no-op
+# (`monkeypatch.setattr(_graphql, "_sleep", lambda _s: None)`) per
+# quality-tests.md §9 instead of patching stdlib ``time.sleep``.
+_sleep: Callable[[float], None] = time.sleep
+
+
+def _is_transient_graphql_errors(errors: Any) -> bool:
+    """Return True when every GraphQL error looks like a transient server fault.
+
+    A non-empty ``errors`` list every entry of which carries a message matching
+    :data:`_TRANSIENT_GRAPHQL_MARKERS`. A single non-transient (or untyped /
+    message-less) error makes the whole batch non-retryable — we never want to
+    spin on a genuine NOT_FOUND or query-validation failure.
+    """
+    if not isinstance(errors, list) or not errors:
+        return False
+    for err in errors:
+        message = err.get("message", "") if isinstance(err, dict) else ""
+        if not isinstance(message, str):
+            return False
+        lowered = message.lower()
+        if not any(marker in lowered for marker in _TRANSIENT_GRAPHQL_MARKERS):
+            return False
+    return True
+
 
 _RELEASES_QUERY = """
 query($owner: String!, $repo: String!, $cursor: String) {
@@ -70,25 +117,49 @@ def _graphql(
 ) -> dict[str, Any]:
     """POST a GraphQL query and return the ``data`` envelope.
 
+    Transient server-side failures (GitHub returns HTTP 200 with a timeout
+    ``errors`` array on large repos) are retried up to
+    :data:`_MAX_GRAPHQL_ATTEMPTS` times with exponential backoff. Non-transient
+    GraphQL errors (NOT_FOUND, validation, auth) raise immediately.
+
     Raises:
         HttpStatusError / HttpTimeoutError: Transport failure (via :func:`post_json`).
-        ApiResponseError: GraphQL ``errors`` array present, or unexpected
-            response shape.
+        ApiResponseError: Non-transient GraphQL ``errors`` array, a transient
+            error that survived every retry, or an unexpected response shape.
     """
-    payload = post_json(
-        _GRAPHQL_URL,
-        body={"query": query, "variables": variables},
-        headers=headers,
-        client=client,
-    )
-    if not isinstance(payload, dict):
-        raise ApiResponseError("graphql response is not a JSON object", payload=payload)
-    if "errors" in payload:
-        raise ApiResponseError("graphql errors", payload=payload["errors"])
-    data = payload.get("data")
-    if not isinstance(data, dict):
-        raise ApiResponseError("graphql response missing data", payload=payload)
-    return data
+    last_errors: Any = None
+    for attempt in range(_MAX_GRAPHQL_ATTEMPTS):
+        payload = post_json(
+            _GRAPHQL_URL,
+            body={"query": query, "variables": variables},
+            headers=headers,
+            client=client,
+        )
+        if not isinstance(payload, dict):
+            raise ApiResponseError("graphql response is not a JSON object", payload=payload)
+        if "errors" in payload:
+            errors = payload["errors"]
+            is_last = attempt == _MAX_GRAPHQL_ATTEMPTS - 1
+            if _is_transient_graphql_errors(errors) and not is_last:
+                delay = _GRAPHQL_RETRY_BACKOFF_BASE * (2**attempt)
+                log.warning(
+                    "transient graphql error (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1,
+                    _MAX_GRAPHQL_ATTEMPTS,
+                    delay,
+                    errors,
+                )
+                last_errors = errors
+                _sleep(delay)
+                continue
+            raise ApiResponseError("graphql errors", payload=errors)
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise ApiResponseError("graphql response missing data", payload=payload)
+        return data
+    # Loop only exits via return/raise above; this guards the exhausted-retry
+    # path so a transient error that never clears still surfaces as a failure.
+    raise ApiResponseError("graphql errors", payload=last_errors)
 
 
 def _fetch_all_assets(

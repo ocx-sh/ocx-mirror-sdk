@@ -217,6 +217,109 @@ def test_list_releases_raises_api_response_error_on_graphql_errors(monkeypatch):
         _graphql(client=_client(handler))
 
 
+def _silence_sleep(monkeypatch) -> list[float]:
+    """Swap the retry sleep seam for a no-op that records requested delays."""
+    delays: list[float] = []
+    monkeypatch.setattr(graphql_module, "_sleep", lambda seconds: delays.append(seconds))
+    return delays
+
+
+_TRANSIENT_ERROR = {
+    "errors": [
+        {
+            "message": (
+                "Something went wrong while executing your query. "
+                "This may be the result of a timeout, or it could be a GitHub bug."
+            )
+        }
+    ],
+    "data": None,
+}
+
+
+def test_transient_graphql_error_retries_then_succeeds(monkeypatch):
+    _set_token(monkeypatch)
+    _isolate_module_caches(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
+
+    responses = iter(
+        [
+            httpx.Response(200, json=_TRANSIENT_ERROR),
+            httpx.Response(200, json=_TRANSIENT_ERROR),
+            httpx.Response(
+                200,
+                json=_releases_page([_release_node("v1.0.0", assets=[_asset("tool.tgz", "https://x/tool.tgz")])]),
+            ),
+        ]
+    )
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return next(responses)
+
+    result = _graphql("owner/repo", client=_client(handler))
+
+    assert [r.tag_name for r in result] == ["v1.0.0"]
+    # Two transient failures → two backoff sleeps before the success.
+    assert delays == [1.0, 2.0]
+
+
+def test_transient_graphql_error_raises_after_exhausting_retries(monkeypatch):
+    _set_token(monkeypatch)
+    _isolate_module_caches(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_TRANSIENT_ERROR)
+
+    with pytest.raises(ApiResponseError, match="graphql errors"):
+        _graphql("owner/repo", client=_client(handler))
+
+    # 4 attempts → 3 backoff sleeps before the terminal raise.
+    assert delays == [1.0, 2.0, 4.0]
+
+
+def test_non_transient_graphql_error_does_not_retry(monkeypatch):
+    _set_token(monkeypatch)
+    _isolate_module_caches(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            200, json={"errors": [{"type": "NOT_FOUND", "message": "Could not resolve to a Repository"}], "data": None}
+        )
+
+    with pytest.raises(ApiResponseError, match="graphql errors"):
+        _graphql("owner/repo", client=_client(handler))
+
+    assert calls == 1
+    assert delays == []
+
+
+@pytest.mark.parametrize(
+    ("errors", "expected"),
+    [
+        pytest.param([], False, id="empty"),
+        pytest.param("nope", False, id="not-a-list"),
+        pytest.param([{"message": "Something went wrong while executing your query."}], True, id="github-timeout"),
+        pytest.param([{"message": "Connection timed out"}], True, id="timed-out"),
+        pytest.param([{"message": "NOT_FOUND"}], False, id="not-found"),
+        pytest.param([{"message": "rate limited"}], False, id="rate-limited"),
+        pytest.param(
+            [{"message": "Connection timed out"}, {"message": "NOT_FOUND"}],
+            False,
+            id="mixed-transient-and-hard",
+        ),
+        pytest.param([{"type": "FORBIDDEN"}], False, id="no-message"),
+        pytest.param([{"message": 123}], False, id="non-str-message"),
+    ],
+)
+def test_is_transient_graphql_errors(errors, expected):
+    assert graphql_module._is_transient_graphql_errors(errors) is expected
+
+
 def test_list_releases_raises_http_status_error_on_5xx(monkeypatch):
     _set_token(monkeypatch)
     _isolate_module_caches(monkeypatch)
