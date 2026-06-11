@@ -5,6 +5,23 @@ For the authoritative changelog, see the
 
 Notable releases:
 
+## v0.5.0 — REST backend rewrite (2026-06-11)
+
+- **Breaking**: `github.list_releases(..., session=github3.GitHub)` is removed.
+  Both backends now share the `client=httpx.Client | None` dependency-injection
+  hook. The `github3.py` runtime dependency is dropped (REST is now pure
+  `httpx`).
+- **Fix / performance**: the REST backend paginated at `per_page=100` and
+  refetched assets per release via `github3`, so it 504'd on asset-heavy repos
+  (`python-build-standalone`, ~850 assets/release) and was expensive elsewhere.
+  It now paginates the releases endpoint directly and reads the **inline**
+  `assets` array (no per-release refetch), defaulting to `per_page=100` and
+  transparently falling back to `per_page=10` on a 502/503/504/timeout. A full
+  `python-build-standalone` crawl drops from ~1000 GraphQL points to ~13 REST
+  requests — REST is now the right default even for large repos, and avoids the
+  GraphQL points-budget exhaustion that bit concurrent CI mirror runs.
+- **New**: `http.fetch_json` accepts an optional `params=` argument.
+
 ## v0.4.2 — Robust GraphQL retry (2026-06-11)
 
 - **Fix**: the GraphQL retry added in v0.4.1 only matched a fixed list of error
