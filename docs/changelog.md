@@ -5,6 +5,13 @@ For the authoritative changelog, see the
 
 Notable releases:
 
+## v0.5.1 — REST per-page retry (2026-06-11)
+
+- **Fix**: the REST backend now retries an individual releases page that 504s /
+  times out transiently (3 retries, exponential backoff) at the fallback page
+  size, instead of letting one flaky page abort the whole crawl. The large-page
+  probe still fails fast straight to the smaller page size.
+
 ## v0.5.0 — REST backend rewrite (2026-06-11)
 
 - **Breaking**: `github.list_releases(..., session=github3.GitHub)` is removed.
