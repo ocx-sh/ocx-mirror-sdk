@@ -74,6 +74,28 @@ class HttpTimeoutError(TransportError):
         super().__init__(f"HTTP timeout for {url}")
 
 
+class HttpTransportError(TransportError):
+    """A network / protocol failure below the HTTP status layer.
+
+    Wraps ``httpx`` transport failures that are neither a clean timeout
+    (:class:`HttpTimeoutError`) nor a status code (:class:`HttpStatusError`) —
+    connection resets, read errors, and incomplete / early-closed responses
+    (``httpx.NetworkError`` / ``httpx.ProtocolError``). Retry candidate.
+
+    Attributes:
+        url: Absolute request URL.
+        detail: Short description of the underlying transport failure.
+    """
+
+    def __init__(self, *, url: str, detail: str | None = None) -> None:
+        self.url = url
+        self.detail = detail
+        message = f"HTTP transport error for {url}"
+        if detail:
+            message = f"{message}: {detail}"
+        super().__init__(message)
+
+
 class ApiResponseError(OcxMirrorError):
     """The server responded but the payload is unusable.
 

@@ -26,7 +26,13 @@ import httpx
 
 from ocx_mirror_sdk._pipeline import fetch_and_filter
 from ocx_mirror_sdk.cache import FileCache
-from ocx_mirror_sdk.errors import ApiResponseError, HttpStatusError, HttpTimeoutError
+from ocx_mirror_sdk.errors import (
+    ApiResponseError,
+    HttpStatusError,
+    HttpTimeoutError,
+    HttpTransportError,
+    TransportError,
+)
 from ocx_mirror_sdk.github._auth import _get_token
 from ocx_mirror_sdk.http import fetch_json
 from ocx_mirror_sdk.releases import Release
@@ -38,9 +44,10 @@ _cache = FileCache("github")
 _API_ROOT = "https://api.github.com"
 _DEFAULT_PER_PAGE = 100
 # Small enough that the list endpoint serialises even ~850-asset releases
-# (python-build-standalone) within the timeout — see module docstring.
-_FALLBACK_PER_PAGE = 10
-_MAX_PAGES = 100  # backstop: _MAX_PAGES * per_page releases
+# (python-build-standalone) within the timeout, and keeps each response small
+# enough that GitHub rarely drops it mid-body under load — see module docstring.
+_FALLBACK_PER_PAGE = 5
+_MAX_PAGES = 200  # backstop: _MAX_PAGES * per_page releases
 _OVERLOAD_STATUS = frozenset({502, 503, 504})
 
 # Even at a small page size GitHub intermittently 504s an individual page under
@@ -66,10 +73,15 @@ def _headers() -> dict[str, str]:
 
 
 def _is_overload(exc: Exception) -> bool:
-    """True when *exc* is a transient overload worth retrying at a smaller page."""
-    return isinstance(exc, HttpTimeoutError) or (
-        isinstance(exc, HttpStatusError) and exc.status_code in _OVERLOAD_STATUS
-    )
+    """True when *exc* is a transient failure worth retrying.
+
+    Covers clean timeouts, network/protocol errors (connection resets, early
+    response closes), and 502/503/504 status codes. A non-overload status (e.g.
+    500, 422) is not retried.
+    """
+    if isinstance(exc, (HttpTimeoutError, HttpTransportError)):
+        return True
+    return isinstance(exc, HttpStatusError) and exc.status_code in _OVERLOAD_STATUS
 
 
 def _fetch_page(
@@ -98,10 +110,10 @@ def _fetch_page(
                 raise ApiResponseError(f"repository not found: {owner}/{repo}", payload=None) from e
             if not _is_overload(e) or attempt == retries:
                 raise
-        except HttpTimeoutError:
-            if attempt == retries:
+        except TransportError as e:
+            # Timeouts + network/protocol failures (HttpStatusError handled above).
+            if not _is_overload(e) or attempt == retries:
                 raise
-            log.debug("timeout fetching %s page %d (attempt %d); retrying", url, page, attempt + 1)
         else:
             if not isinstance(batch, list):
                 raise ApiResponseError("github releases response is not a JSON array", payload=batch)
@@ -193,7 +205,7 @@ def list_releases_rest(
             return _crawl(owner, repo, per_page, headers=headers, client=client, retries=_PAGE_RETRIES)
         try:
             return _crawl(owner, repo, per_page, headers=headers, client=client, retries=0)
-        except (HttpStatusError, HttpTimeoutError) as e:
+        except TransportError as e:
             if not _is_overload(e):
                 raise
             log.warning(

@@ -10,7 +10,7 @@ no patching of ``httpx.Client.send``.
 import httpx
 import pytest
 
-from ocx_mirror_sdk import ApiResponseError, HttpStatusError, HttpTimeoutError, http
+from ocx_mirror_sdk import ApiResponseError, HttpStatusError, HttpTimeoutError, HttpTransportError, http
 
 
 def _make_client(handler) -> httpx.Client:
@@ -81,6 +81,27 @@ def test_fetch_json_raises_http_timeout_error():
 
     with pytest.raises(HttpTimeoutError, match="timeout"):
         http.fetch_json("https://api.example.com/slow", client=_make_client(handler))
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        pytest.param(httpx.ReadError("connection reset"), id="read-error"),
+        pytest.param(httpx.RemoteProtocolError("server disconnected"), id="protocol-error"),
+        pytest.param(httpx.ConnectError("refused"), id="connect-error"),
+    ],
+)
+def test_fetch_json_wraps_transport_errors(exc):
+    """Network / protocol failures wrap to HttpTransportError, not raw httpx."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise exc
+
+    with pytest.raises(HttpTransportError) as exc_info:
+        http.fetch_json("https://api.example.com/x", client=_make_client(handler))
+
+    assert exc_info.value.url == "https://api.example.com/x"
+    assert exc_info.value.__cause__ is exc
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from ocx_mirror_sdk.errors import ApiResponseError, HttpStatusError, HttpTimeoutError
+from ocx_mirror_sdk.errors import ApiResponseError, HttpStatusError, HttpTimeoutError, HttpTransportError
 
 _CLIENT: httpx.Client | None = None
 
@@ -74,6 +74,11 @@ def fetch_json(
         raise HttpTimeoutError(url=url) from e
     except httpx.HTTPStatusError as e:
         raise _wrap_status(e) from e
+    except httpx.TransportError as e:
+        # NetworkError / ProtocolError / etc. — connection reset, read error,
+        # or a response the server closed early. Transient; wrap so callers can
+        # retry instead of seeing a raw httpx exception leak past the boundary.
+        raise HttpTransportError(url=url, detail=str(e)) from e
     try:
         return response.json()
     except json.JSONDecodeError as e:
@@ -98,6 +103,11 @@ def fetch_text(url: str, *, client: httpx.Client | None = None) -> str:
         raise HttpTimeoutError(url=url) from e
     except httpx.HTTPStatusError as e:
         raise _wrap_status(e) from e
+    except httpx.TransportError as e:
+        # NetworkError / ProtocolError / etc. — connection reset, read error,
+        # or a response the server closed early. Transient; wrap so callers can
+        # retry instead of seeing a raw httpx exception leak past the boundary.
+        raise HttpTransportError(url=url, detail=str(e)) from e
     return response.text
 
 
@@ -128,6 +138,11 @@ def post_json(
         raise HttpTimeoutError(url=url) from e
     except httpx.HTTPStatusError as e:
         raise _wrap_status(e) from e
+    except httpx.TransportError as e:
+        # NetworkError / ProtocolError / etc. — connection reset, read error,
+        # or a response the server closed early. Transient; wrap so callers can
+        # retry instead of seeing a raw httpx exception leak past the boundary.
+        raise HttpTransportError(url=url, detail=str(e)) from e
     try:
         return response.json()
     except json.JSONDecodeError as e:

@@ -236,6 +236,30 @@ def test_page_504_exhausts_retries_then_raises(monkeypatch):
     assert len(delays) == rest_module._PAGE_RETRIES
 
 
+def test_mid_body_connection_drop_retries_then_succeeds(monkeypatch):
+    """A transient network/protocol error on a page is retried, not fatal."""
+    _isolate_cache(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        per_page = int(request.url.params.get("per_page"))
+        page = int(request.url.params.get("page", "1"))
+        if per_page == rest_module._DEFAULT_PER_PAGE:
+            raise httpx.RemoteProtocolError("server disconnected")  # force fallback
+        if page == 1:
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise httpx.ReadError("connection reset")  # transient on first fallback try
+            return httpx.Response(200, json=[_rel("v1.0.0")])
+        return httpx.Response(200, json=[])
+
+    results = _rest(client=_client(handler))
+
+    assert [r.tag_name for r in results] == ["v1.0.0"]
+    assert delays == [1.0]  # one transient drop → one backoff sleep
+
+
 # ---------------------------------------------------------------------------
 # Error paths
 # ---------------------------------------------------------------------------
