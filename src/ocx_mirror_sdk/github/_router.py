@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 
-import github3
 import httpx
 
 from ocx_mirror_sdk.cache import FileCache
@@ -24,9 +23,11 @@ class Backend(StrEnum):
     """GitHub release-fetch backend selection.
 
     Values:
-        REST: ``github3.py`` REST API. Default. Fast for small repos.
-        GRAPHQL: ``httpx``-backed GraphQL API. Use on repos where REST
-            504s due to large per-release asset counts.
+        REST: ``httpx``-backed REST API. Default. Cheap on rate budget
+            (request-count limited, asset lists inline) and pages adaptively,
+            so it handles asset-heavy repos too.
+        GRAPHQL: ``httpx``-backed GraphQL API. Points-budget limited; prefer
+            REST unless a specific repo needs it.
     """
 
     REST = "rest"
@@ -52,7 +53,6 @@ def list_releases(
     include_prereleases: bool = True,
     include_drafts: bool = True,
     cache: FileCache | None = None,
-    session: github3.GitHub | None = None,
     client: httpx.Client | None = None,
 ) -> list[Release]:
     """Return releases for a GitHub repository as :class:`Release` objects.
@@ -65,10 +65,8 @@ def list_releases(
         include_prereleases: If ``False``, pre-releases are excluded.
         include_drafts: If ``False``, draft releases are excluded.
         cache: Optional :class:`FileCache` override.
-        session: Optional injected ``github3.GitHub`` client.
-            Used only when ``backend=Backend.REST``.
-        client: Optional injected ``httpx.Client``.
-            Used only when ``backend=Backend.GRAPHQL``.
+        client: Optional injected ``httpx.Client`` (used by both backends).
+            Tests should pass ``httpx.Client(transport=httpx.MockTransport(...))``.
 
     Raises:
         ValueError: ``path`` is not ``"owner/repo"``, or ``backend`` is not a
@@ -93,7 +91,7 @@ def list_releases(
                 include_prereleases=include_prereleases,
                 include_drafts=include_drafts,
                 cache=cache,
-                session=session,
+                client=client,
             )
         # Backend.GRAPHQL
         return list_releases_graphql(

@@ -49,6 +49,7 @@ def fetch_json(
     url: str,
     *,
     headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
     client: httpx.Client | None = None,
 ) -> Any:
     """Fetch a URL and parse the response as JSON.
@@ -56,6 +57,7 @@ def fetch_json(
     Args:
         url: Target URL.
         headers: Optional request headers (e.g. ``PRIVATE-TOKEN``).
+        params: Optional query-string parameters (e.g. ``{"per_page": 100}``).
         client: Optional injected client. Defaults to the module-level
             singleton (lazy-initialized with sane retry / timeout). Tests
             should pass ``httpx.Client(transport=httpx.MockTransport(...))``.
@@ -66,7 +68,7 @@ def fetch_json(
         ApiResponseError: Body was not valid JSON.
     """
     try:
-        response = (client or _get_client()).get(url, headers=headers)
+        response = (client or _get_client()).get(url, headers=headers, params=params)
         response.raise_for_status()
     except httpx.TimeoutException as e:
         raise HttpTimeoutError(url=url) from e

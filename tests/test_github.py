@@ -3,57 +3,82 @@
 
 """Tests for the REST backend of ``ocx_mirror_sdk.list_releases``.
 
-Exercises the router (``backend=Backend.REST``) end-to-end and the
-``_login`` helper directly.
+Exercises the router (``backend=Backend.REST``) end-to-end with an injected
+``httpx.Client`` + ``MockTransport`` per ``quality-tests.md`` §8, and
+``FakeFileCache`` (``tests/_fakes.py``) per §7 in place of the disk cache.
 """
 
-from unittest.mock import MagicMock, patch
+from collections.abc import Callable
 
+import httpx
 import pytest
+from _fakes import FakeFileCache
 
-from ocx_mirror_sdk import Asset, ConfigurationError
-from ocx_mirror_sdk.errors import ApiResponseError
+from ocx_mirror_sdk import Asset
+from ocx_mirror_sdk.errors import ApiResponseError, HttpStatusError
+from ocx_mirror_sdk.github import _rest as rest_module
 from ocx_mirror_sdk.github import list_releases
 from ocx_mirror_sdk.releases import Release
 
-
-def _make_asset(name: str, url: str) -> MagicMock:
-    asset = MagicMock()
-    asset.name = name
-    asset.browser_download_url = url
-    return asset
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def _make_release(
-    tag: str,
-    body: str = "",
-    prerelease: bool = False,
-    draft: bool = False,
-    assets: list | None = None,
-) -> MagicMock:
-    release = MagicMock()
-    release.tag_name = tag
-    release.body = body
-    release.prerelease = prerelease
-    release.draft = draft
-    release.assets.return_value = assets or []
-    return release
+def _rel(
+    tag: str, *, body: str = "", prerelease: bool = False, draft: bool = False, assets: list[dict] | None = None
+) -> dict:
+    """A REST release object as returned by the list endpoint (assets inline)."""
+    return {
+        "tag_name": tag,
+        "body": body,
+        "prerelease": prerelease,
+        "draft": draft,
+        "assets": assets if assets is not None else [],
+    }
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_list_releases_basic(mock_login, mock_cache):
-    asset = _make_asset("tool.tar.gz", "https://example.com/tool.tar.gz")
-    release = _make_release("v1.0.0", body="Release notes", assets=[asset])
+def _asset(name: str, url: str) -> dict:
+    # Real payloads carry more keys; the backend must read only these two.
+    return {"name": name, "browser_download_url": url, "id": 1, "size": 10}
 
-    repo = MagicMock()
-    repo.releases.return_value = [release]
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
 
-    results = list_releases("owner/repo")
+def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def _isolate_cache(monkeypatch) -> FakeFileCache:
+    cache = FakeFileCache()
+    monkeypatch.setattr(rest_module, "_cache", cache)
+    return cache
+
+
+def _rest(path="o/r", **kw):
+    return list_releases(path, backend="rest", **kw)
+
+
+def _single_page_handler(releases: list[dict]) -> Callable[[httpx.Request], httpx.Response]:
+    """Serve ``releases`` on page 1, then an empty page (end of pagination)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params.get("page", "1"))
+        return httpx.Response(200, json=releases if page == 1 else [])
+
+    return handler
+
+
+# ---------------------------------------------------------------------------
+# Happy paths
+# ---------------------------------------------------------------------------
+
+
+def test_list_releases_basic(monkeypatch):
+    _isolate_cache(monkeypatch)
+    handler = _single_page_handler(
+        [_rel("v1.0.0", body="Release notes", assets=[_asset("tool.tar.gz", "https://x/tool.tar.gz")])]
+    )
+
+    results = _rest("owner/repo", client=_client(handler))
 
     assert len(results) == 1
     r = results[0]
@@ -65,170 +90,200 @@ def test_list_releases_basic(mock_login, mock_cache):
     assert len(r.assets) == 1
     assert isinstance(r.assets[0], Asset)
     assert r.assets[0].name == "tool.tar.gz"
+    assert r.assets[0].browser_download_url == "https://x/tool.tar.gz"
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_list_releases_empty(mock_login, mock_cache):
-    repo = MagicMock()
-    repo.releases.return_value = []
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
-
-    results = list_releases("owner/repo")
+def test_list_releases_empty(monkeypatch):
+    _isolate_cache(monkeypatch)
+    results = _rest("owner/repo", client=_client(_single_page_handler([])))
     assert results == []
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_list_releases_repo_not_found_raises_api_response_error(mock_login, mock_cache):
-    gh = MagicMock()
-    gh.repository.return_value = None
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
-
-    with pytest.raises(ApiResponseError, match="repository not found"):
-        list_releases("owner/nonexistent")
-
-
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_list_releases_prerelease_and_draft(mock_login, mock_cache):
-    r1 = _make_release("v2.0.0-rc1", prerelease=True)
-    r2 = _make_release("v1.0.0", draft=True)
-
-    repo = MagicMock()
-    repo.releases.return_value = [r1, r2]
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
-
-    results = list_releases("owner/repo")
-    assert results[0].prerelease is True
-    assert results[1].draft is True
-
-
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_list_releases_null_body(mock_login, mock_cache):
-    release = _make_release("v1.0.0")
-    release.body = None
-
-    repo = MagicMock()
-    repo.releases.return_value = [release]
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
-
-    results = list_releases("owner/repo")
+def test_list_releases_null_body_normalised_to_empty(monkeypatch):
+    _isolate_cache(monkeypatch)
+    rel = _rel("v1.0.0")
+    rel["body"] = None
+    results = _rest("owner/repo", client=_client(_single_page_handler([rel])))
     assert results[0].body == ""
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_list_releases_multiple_assets(mock_login, mock_cache):
-    assets = [
-        _make_asset("tool-linux.tar.gz", "https://example.com/linux.tar.gz"),
-        _make_asset("tool-darwin.tar.gz", "https://example.com/darwin.tar.gz"),
-    ]
-    release = _make_release("v1.0.0", assets=assets)
-
-    repo = MagicMock()
-    repo.releases.return_value = [release]
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
-
-    results = list_releases("owner/repo")
-    assert len(results[0].assets) == 2
-    names = {a.name for a in results[0].assets}
-    assert names == {"tool-linux.tar.gz", "tool-darwin.tar.gz"}
+def test_list_releases_multiple_assets(monkeypatch):
+    _isolate_cache(monkeypatch)
+    rel = _rel(
+        "v1.0.0",
+        assets=[_asset("tool-linux.tar.gz", "https://x/linux"), _asset("tool-darwin.tar.gz", "https://x/darwin")],
+    )
+    results = _rest("owner/repo", client=_client(_single_page_handler([rel])))
+    assert {a.name for a in results[0].assets} == {"tool-linux.tar.gz", "tool-darwin.tar.gz"}
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_exclude_prereleases(mock_login, mock_cache):
-    stable = _make_release("v1.0.0")
-    pre = _make_release("v2.0.0-rc1", prerelease=True)
+def test_list_releases_paginates(monkeypatch):
+    """Full pages are followed; a short page ends pagination."""
+    _isolate_cache(monkeypatch)
+    # per_page defaults to 100; emit a full page then a short page.
+    page1 = [_rel(f"v{i}") for i in range(100)]
+    page2 = [_rel("v100")]
+    pages = {1: page1, 2: page2}
 
-    repo = MagicMock()
-    repo.releases.return_value = [stable, pre]
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params.get("page", "1"))
+        return httpx.Response(200, json=pages.get(page, []))
 
-    results = list_releases("owner/repo", include_prereleases=False)
-    assert len(results) == 1
-    assert results[0].tag_name == "v1.0.0"
+    results = _rest(client=_client(handler))
+    assert [r.tag_name for r in results] == [f"v{i}" for i in range(101)]
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-@patch("ocx_mirror_sdk.github._rest._login")
-def test_exclude_drafts(mock_login, mock_cache):
-    stable = _make_release("v1.0.0")
-    draft = _make_release("v2.0.0", draft=True)
-
-    repo = MagicMock()
-    repo.releases.return_value = [stable, draft]
-    gh = MagicMock()
-    gh.repository.return_value = repo
-    mock_login.return_value = gh
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
-
-    results = list_releases("owner/repo", include_drafts=False)
-    assert len(results) == 1
-    assert results[0].tag_name == "v1.0.0"
+# ---------------------------------------------------------------------------
+# Adaptive page-size fallback
+# ---------------------------------------------------------------------------
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-def test_cache_key_format(mock_cache):
-    mock_cache.fetch_json.return_value = []
+@pytest.mark.parametrize("overload_status", [502, 503, 504])
+def test_falls_back_to_small_page_on_overload(monkeypatch, overload_status):
+    """A 5xx overload at the default page size retries at the fallback size."""
+    _isolate_cache(monkeypatch)
+    seen_per_page: list[int] = []
 
-    list_releases("corretto/corretto-21")
+    def handler(request: httpx.Request) -> httpx.Response:
+        per_page = int(request.url.params.get("per_page"))
+        page = int(request.url.params.get("page", "1"))
+        seen_per_page.append(per_page)
+        if per_page == rest_module._DEFAULT_PER_PAGE:
+            return httpx.Response(overload_status, text="overloaded")
+        # Fallback page size succeeds.
+        return httpx.Response(200, json=[_rel("v1.0.0")] if page == 1 else [])
 
-    mock_cache.fetch_json.assert_called_once()
-    key = mock_cache.fetch_json.call_args[0][0]
-    assert key == "corretto/corretto-21/releases"
+    results = _rest(client=_client(handler))
 
-
-@patch("ocx_mirror_sdk.github._rest._cache")
-def test_cache_key_ignores_filters(mock_cache):
-    mock_cache.fetch_json.return_value = []
-
-    list_releases("o/r", include_prereleases=False, include_drafts=False)
-
-    key = mock_cache.fetch_json.call_args[0][0]
-    assert key == "o/r/releases"
-
-
-@patch("ocx_mirror_sdk.github._rest._cache")
-def test_list_releases_accepts_string_backend(mock_cache):
-    """Backend may be passed as raw string (StrEnum drop-in)."""
-    mock_cache.fetch_json.return_value = []
-    assert list_releases("o/r", backend="rest") == []
+    assert [r.tag_name for r in results] == ["v1.0.0"]
+    assert rest_module._DEFAULT_PER_PAGE in seen_per_page
+    assert rest_module._FALLBACK_PER_PAGE in seen_per_page
 
 
-@patch("ocx_mirror_sdk.github._rest._cache")
-def test_list_releases_session_kwarg_replaces_login(mock_cache):
-    """When ``session`` is injected, ``_login`` must NOT be called."""
-    mock_cache.fetch_json.side_effect = lambda key, loader: loader()
+def test_timeout_at_default_page_falls_back(monkeypatch):
+    _isolate_cache(monkeypatch)
 
-    repo = MagicMock()
-    repo.releases.return_value = []
-    fake_session = MagicMock()
-    fake_session.repository.return_value = repo
+    def handler(request: httpx.Request) -> httpx.Response:
+        per_page = int(request.url.params.get("per_page"))
+        page = int(request.url.params.get("page", "1"))
+        if per_page == rest_module._DEFAULT_PER_PAGE:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=[_rel("v1.0.0")] if page == 1 else [])
 
-    with patch("ocx_mirror_sdk.github._rest._login") as mock_login:
-        list_releases("o/r", session=fake_session)
+    results = _rest(client=_client(handler))
+    assert [r.tag_name for r in results] == ["v1.0.0"]
 
-    mock_login.assert_not_called()
-    fake_session.repository.assert_called_once_with("o", "r")
+
+def test_non_overload_status_does_not_fall_back(monkeypatch):
+    """A 500 (not in the overload set) propagates without a fallback attempt."""
+    _isolate_cache(monkeypatch)
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(500, text="boom")
+
+    with pytest.raises(HttpStatusError, match="HTTP 500"):
+        _rest(client=_client(handler))
+    assert calls == 1  # no fallback retry
+
+
+# ---------------------------------------------------------------------------
+# Error paths
+# ---------------------------------------------------------------------------
+
+
+def test_repo_not_found_raises_api_response_error(monkeypatch):
+    _isolate_cache(monkeypatch)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "Not Found"})
+
+    with pytest.raises(ApiResponseError, match="repository not found"):
+        _rest("owner/nonexistent", client=_client(handler))
+
+
+def test_non_array_payload_raises_api_response_error(monkeypatch):
+    _isolate_cache(monkeypatch)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": "unexpected"})
+
+    with pytest.raises(ApiResponseError, match="not a JSON array"):
+        _rest(client=_client(handler))
+
+
+# ---------------------------------------------------------------------------
+# Filtering
+# ---------------------------------------------------------------------------
+
+
+def test_exclude_prereleases(monkeypatch):
+    _isolate_cache(monkeypatch)
+    handler = _single_page_handler([_rel("v1.0.0"), _rel("v2.0.0-rc1", prerelease=True)])
+    results = _rest("owner/repo", include_prereleases=False, client=_client(handler))
+    assert [r.tag_name for r in results] == ["v1.0.0"]
+
+
+def test_exclude_drafts(monkeypatch):
+    _isolate_cache(monkeypatch)
+    handler = _single_page_handler([_rel("v1.0.0"), _rel("v2.0.0", draft=True)])
+    results = _rest("owner/repo", include_drafts=False, client=_client(handler))
+    assert [r.tag_name for r in results] == ["v1.0.0"]
+
+
+# ---------------------------------------------------------------------------
+# Auth header
+# ---------------------------------------------------------------------------
+
+
+def test_token_sets_authorization_header(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+    _isolate_cache(monkeypatch)
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("Authorization"))
+        return httpx.Response(200, json=[])
+
+    _rest(client=_client(handler))
+    assert seen == ["Bearer secret-token"]
+
+
+def test_no_token_omits_authorization_header(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    _isolate_cache(monkeypatch)
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("Authorization"))
+        return httpx.Response(200, json=[])
+
+    _rest(client=_client(handler))
+    assert seen == [None]
+
+
+# ---------------------------------------------------------------------------
+# Cache key + router behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_cache_key_format(monkeypatch):
+    cache = _isolate_cache(monkeypatch)
+    list_releases("corretto/corretto-21", client=_client(_single_page_handler([])))
+    assert "corretto/corretto-21/releases" in cache.store
+
+
+def test_cache_key_ignores_filters(monkeypatch):
+    cache = _isolate_cache(monkeypatch)
+    list_releases("o/r", include_prereleases=False, include_drafts=False, client=_client(_single_page_handler([])))
+    assert "o/r/releases" in cache.store
+
+
+def test_list_releases_accepts_string_backend(monkeypatch):
+    _isolate_cache(monkeypatch)
+    assert list_releases("o/r", backend="rest", client=_client(_single_page_handler([]))) == []
 
 
 def test_list_releases_unknown_backend_raises_value_error():
@@ -250,54 +305,3 @@ def test_release_round_trip():
         assets=[Asset(name="f.tar.gz", browser_download_url="https://x/f.tar.gz")],
     )
     assert Release.from_dict(release.to_dict()) == release
-
-
-# ---------------------------------------------------------------------------
-# _login() — patches the imported `github3` per "patch where used"
-# (quality-tests.md §6).
-# ---------------------------------------------------------------------------
-
-
-def test_login_uses_token_when_env_set(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
-
-    with patch("ocx_mirror_sdk.github._rest.github3", autospec=True) as mock_gh3:
-        gh = MagicMock()
-        mock_gh3.login.return_value = gh
-
-        from ocx_mirror_sdk.github._rest import _login
-
-        result = _login()
-
-    mock_gh3.login.assert_called_once_with(token="secret-token")
-    mock_gh3.GitHub.assert_not_called()
-    assert result is gh
-    assert gh.session.default_read_timeout == 30
-
-
-def test_login_uses_anonymous_when_no_token(monkeypatch):
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-
-    with patch("ocx_mirror_sdk.github._rest.github3", autospec=True) as mock_gh3:
-        gh = MagicMock()
-        mock_gh3.GitHub.return_value = gh
-
-        from ocx_mirror_sdk.github._rest import _login
-
-        result = _login()
-
-    mock_gh3.GitHub.assert_called_once_with()
-    mock_gh3.login.assert_not_called()
-    assert result is gh
-
-
-def test_login_raises_configuration_error_when_github3_returns_none(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "bad-token")
-
-    with patch("ocx_mirror_sdk.github._rest.github3", autospec=True) as mock_gh3:
-        mock_gh3.login.return_value = None
-
-        from ocx_mirror_sdk.github._rest import _login
-
-        with pytest.raises(ConfigurationError, match="could not be initialized"):
-            _login()

@@ -18,7 +18,7 @@ classifiers = [
     "Topic :: System :: Archiving :: Packaging",
     "Typing :: Typed",
 ]
-dependencies = ["github3.py>=4", "httpx>=0.28"]
+dependencies = ["httpx>=0.28"]
 
 [project.urls]
 Homepage = "https://github.com/ocx-sh/ocx-mirror-sdk"

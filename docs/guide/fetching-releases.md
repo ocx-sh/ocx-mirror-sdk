@@ -20,26 +20,30 @@ GitHub entry point. The `backend` kwarg picks between two implementations.
 
 | | `Backend.REST` (default) | `Backend.GRAPHQL` |
 |---|---|---|
-| Library | `github3.py` | `httpx` |
+| Library | `httpx` | `httpx` |
 | Auth | Optional (`GITHUB_TOKEN`) | **Required** |
 | Rate limit (unauthed) | 60 req/h | n/a (auth required) |
-| Rate limit (authed) | 5 000 req/h | 5 000 points/h |
-| Big repos (≥100 assets/release) | May 504 | OK |
+| Rate limit (authed) | 5 000 **req**/h | 5 000 **points**/h |
+| Cost per full crawl | A handful of requests (assets inline) | Hundreds of points (asset pagination) |
+| Big repos (≥100 assets/release) | OK (auto-pages smaller on 504) | OK, but burns points fast |
 | Fetches release notes (`body`) | Yes | No (empty string) |
 | Release list TTL | 1 h | 1 h |
 | Asset list TTL | n/a (single payload) | 7 d (immutable) |
 
 ### Pick REST when
 
-- Repo is small (well under a thousand assets per release).
-- You don't have / don't want to use a `GITHUB_TOKEN` locally.
+- **Almost always** — it is the default and far cheaper on the rate budget
+  (request-count limited, with all assets returned inline). It now pages at
+  `per_page=100` and transparently falls back to a small page size on a
+  502/503/504/timeout, so asset-heavy repos (`python-build-standalone`,
+  `corretto`) no longer need GraphQL.
 - You need release-note `body` (e.g. to feed [`extract_urls`](filtering-urls.md)).
 
 ### Pick GraphQL when
 
-- The REST endpoint returns 504s on a repo with many assets per release
-  (e.g. `python-build-standalone`, `corretto`).
-- You're running in CI where `GITHUB_TOKEN` is already available.
+- You have a specific reason REST cannot serve a repo. Note its limit is a
+  **points** budget (≈5 000/h, shared across concurrent CI jobs) that a heavy
+  crawl exhausts quickly — prefer REST unless you have measured otherwise.
 
 ## Passing `Backend`
 
@@ -81,7 +85,8 @@ github.list_releases(
 )
 ```
 
-REST has an analogous `session=github3.GitHub | None` hook.
+The same `client=httpx.Client | None` hook works for `Backend.REST` — both
+backends share the injected client.
 
 ## GitLab
 
