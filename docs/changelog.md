@@ -5,6 +5,18 @@ For the authoritative changelog, see the
 
 Notable releases:
 
+## v0.5.2 — Wrap + retry transport errors (2026-06-11)
+
+- **New**: `HttpTransportError` (a `TransportError` subclass). `http.fetch_json`
+  / `fetch_text` / `post_json` now wrap `httpx` network/protocol failures
+  (connection resets, read errors, early-closed responses) into it instead of
+  leaking a raw `httpx` exception past the SDK boundary.
+- **Fix**: the REST backend now treats those transport errors as a retryable
+  overload (alongside timeouts and 502/503/504), so a connection dropped
+  mid-body no longer aborts the crawl. The REST fallback page size shrank from
+  10 to 5 to keep each response small enough that GitHub rarely drops it under
+  load.
+
 ## v0.5.1 — REST per-page retry (2026-06-11)
 
 - **Fix**: the REST backend now retries an individual releases page that 504s /

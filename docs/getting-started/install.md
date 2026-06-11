@@ -17,7 +17,7 @@ inline-metadata lets you declare dependencies inside the script itself —
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.5.1",
+#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.5.2",
 # ]
 # ///
 
@@ -37,7 +37,7 @@ uv run my_generator.py
 dependencies = ["ocx-mirror-sdk"]
 
 [tool.uv.sources]
-ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.5.1" }
+ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.5.2" }
 ```
 
 `uv.lock` pins the tag to a commit SHA — `uv sync --frozen` is reproducible.
@@ -55,7 +55,7 @@ PEP 723:
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#   "ocx-mirror-sdk @ https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/v0.5.1/ocx_mirror_sdk-0.5.1-py3-none-any.whl",
+#   "ocx-mirror-sdk @ https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/v0.5.2/ocx_mirror_sdk-0.5.2-py3-none-any.whl",
 # ]
 # ///
 ```
@@ -67,14 +67,14 @@ PEP 723:
 dependencies = ["ocx-mirror-sdk"]
 
 [tool.uv.sources]
-ocx-mirror-sdk = { url = "https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/v0.5.1/ocx_mirror_sdk-0.5.1-py3-none-any.whl" }
+ocx-mirror-sdk = { url = "https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/v0.5.2/ocx_mirror_sdk-0.5.2-py3-none-any.whl" }
 ```
 
 ## Tag selection
 
 | Source | Tag |
 |---|---|
-| Latest stable | [`v0.3.0`](https://github.com/ocx-sh/ocx-mirror-sdk/releases/tag/v0.5.1) |
+| Latest stable | [`v0.3.0`](https://github.com/ocx-sh/ocx-mirror-sdk/releases/tag/v0.5.2) |
 | Bleeding edge (no stability guarantees) | `main` |
 
 Bump only when you've read the release notes — pre-1.0 minor bumps **may**
