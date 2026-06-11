@@ -67,6 +67,13 @@ def _single_page_handler(releases: list[dict]) -> Callable[[httpx.Request], http
     return handler
 
 
+def _silence_sleep(monkeypatch) -> list[float]:
+    """Swap the per-page retry sleep seam for a no-op that records delays."""
+    delays: list[float] = []
+    monkeypatch.setattr(rest_module, "_sleep", lambda seconds: delays.append(seconds))
+    return delays
+
+
 # ---------------------------------------------------------------------------
 # Happy paths
 # ---------------------------------------------------------------------------
@@ -187,6 +194,46 @@ def test_non_overload_status_does_not_fall_back(monkeypatch):
     with pytest.raises(HttpStatusError, match="HTTP 500"):
         _rest(client=_client(handler))
     assert calls == 1  # no fallback retry
+
+
+def test_intermittent_page_504_at_fallback_size_retries_then_succeeds(monkeypatch):
+    """A single page 504 at the fallback size is retried with backoff, not fatal."""
+    _isolate_cache(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
+    attempts: dict[int, int] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        per_page = int(request.url.params.get("per_page"))
+        page = int(request.url.params.get("page", "1"))
+        if per_page == rest_module._DEFAULT_PER_PAGE:
+            return httpx.Response(504, text="too big")  # force fallback to small pages
+        attempts[page] = attempts.get(page, 0) + 1
+        # Page 1 504s twice, then succeeds; page 2 is the empty terminator.
+        if page == 1 and attempts[page] <= 2:
+            return httpx.Response(504, text="transient")
+        return httpx.Response(200, json=[_rel("v1.0.0")] if page == 1 else [])
+
+    results = _rest(client=_client(handler))
+
+    assert [r.tag_name for r in results] == ["v1.0.0"]
+    assert delays == [1.0, 2.0]  # two transient 504s → two backoff sleeps
+
+
+def test_page_504_exhausts_retries_then_raises(monkeypatch):
+    _isolate_cache(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        per_page = int(request.url.params.get("per_page"))
+        if per_page == rest_module._DEFAULT_PER_PAGE:
+            return httpx.Response(504, text="too big")
+        return httpx.Response(504, text="always down")
+
+    with pytest.raises(HttpStatusError, match="HTTP 504"):
+        _rest(client=_client(handler))
+
+    # _PAGE_RETRIES retries → that many backoff sleeps before the terminal raise.
+    assert len(delays) == rest_module._PAGE_RETRIES
 
 
 # ---------------------------------------------------------------------------

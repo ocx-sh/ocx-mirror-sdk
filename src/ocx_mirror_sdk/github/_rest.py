@@ -19,6 +19,8 @@ while still completing on asset-heavy ones.
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 
 import httpx
 
@@ -41,6 +43,16 @@ _FALLBACK_PER_PAGE = 10
 _MAX_PAGES = 100  # backstop: _MAX_PAGES * per_page releases
 _OVERLOAD_STATUS = frozenset({502, 503, 504})
 
+# Even at a small page size GitHub intermittently 504s an individual page under
+# load, so retry a single overloaded page a few times before giving up.
+_PAGE_RETRIES = 3
+_PAGE_RETRY_BACKOFF_BASE = 1.0  # seconds; sleep = base * 2**attempt
+
+# Sleep seam — module attribute so tests can swap it for a no-op
+# (`monkeypatch.setattr(_rest, "_sleep", lambda _s: None)`) per
+# quality-tests.md §9 instead of patching stdlib ``time.sleep``.
+_sleep: Callable[[float], None] = time.sleep
+
 
 def _headers() -> dict[str, str]:
     headers = {
@@ -60,6 +72,55 @@ def _is_overload(exc: Exception) -> bool:
     )
 
 
+def _fetch_page(
+    owner: str,
+    repo: str,
+    per_page: int,
+    page: int,
+    *,
+    headers: dict[str, str],
+    client: httpx.Client | None,
+    retries: int,
+) -> list:
+    """Fetch one releases page, retrying transient overloads with backoff.
+
+    Raises:
+        ApiResponseError: Repository not found (404) or non-array payload.
+        HttpStatusError / HttpTimeoutError: A non-overload failure, or an
+            overload that survived every retry.
+    """
+    url = f"{_API_ROOT}/repos/{owner}/{repo}/releases"
+    for attempt in range(retries + 1):
+        try:
+            batch = fetch_json(url, headers=headers, params={"per_page": per_page, "page": page}, client=client)
+        except HttpStatusError as e:
+            if e.status_code == 404:
+                raise ApiResponseError(f"repository not found: {owner}/{repo}", payload=None) from e
+            if not _is_overload(e) or attempt == retries:
+                raise
+        except HttpTimeoutError:
+            if attempt == retries:
+                raise
+            log.debug("timeout fetching %s page %d (attempt %d); retrying", url, page, attempt + 1)
+        else:
+            if not isinstance(batch, list):
+                raise ApiResponseError("github releases response is not a JSON array", payload=batch)
+            return batch
+        delay = _PAGE_RETRY_BACKOFF_BASE * (2**attempt)
+        log.warning(
+            "releases page %d for %s/%s at per_page=%d overloaded; retry %d/%d in %.1fs",
+            page,
+            owner,
+            repo,
+            per_page,
+            attempt + 1,
+            retries,
+            delay,
+        )
+        _sleep(delay)
+    raise AssertionError("unreachable: loop returns or raises")
+
+
 def _crawl(
     owner: str,
     repo: str,
@@ -67,32 +128,22 @@ def _crawl(
     *,
     headers: dict[str, str],
     client: httpx.Client | None,
+    retries: int,
 ) -> list[dict]:
     """Page the releases list endpoint, returning raw release dicts.
 
     Reads the inline ``assets`` array on each release (complete even for
     releases with hundreds of assets), so no per-release asset call is made.
+    Each page is fetched with ``retries`` transient-overload retries.
 
     Raises:
         ApiResponseError: Repository not found (404) or non-array payload.
-        HttpStatusError / HttpTimeoutError: Other transport failures — the
-            caller decides whether to retry at a smaller page size.
+        HttpStatusError / HttpTimeoutError: A page that overloaded past its
+            retries — the caller decides whether to retry at a smaller size.
     """
     releases: list[dict] = []
     for page in range(1, _MAX_PAGES + 1):
-        try:
-            batch = fetch_json(
-                f"{_API_ROOT}/repos/{owner}/{repo}/releases",
-                headers=headers,
-                params={"per_page": per_page, "page": page},
-                client=client,
-            )
-        except HttpStatusError as e:
-            if e.status_code == 404:
-                raise ApiResponseError(f"repository not found: {owner}/{repo}", payload=None) from e
-            raise
-        if not isinstance(batch, list):
-            raise ApiResponseError("github releases response is not a JSON array", payload=batch)
+        batch = _fetch_page(owner, repo, per_page, page, headers=headers, client=client, retries=retries)
         for rel in batch:
             releases.append(
                 {
@@ -134,10 +185,14 @@ def list_releases_rest(
     headers = _headers()
 
     def fetch() -> list[dict]:
+        # At the fallback (small) size, tolerate intermittent per-page 504s with
+        # retries. At the default (large) size, fail fast on overload — a 504
+        # there is systematic (page too big to serialise), so drop straight to
+        # the smaller size rather than burning backoff on a page that won't fit.
         if per_page <= _FALLBACK_PER_PAGE:
-            return _crawl(owner, repo, per_page, headers=headers, client=client)
+            return _crawl(owner, repo, per_page, headers=headers, client=client, retries=_PAGE_RETRIES)
         try:
-            return _crawl(owner, repo, per_page, headers=headers, client=client)
+            return _crawl(owner, repo, per_page, headers=headers, client=client, retries=0)
         except (HttpStatusError, HttpTimeoutError) as e:
             if not _is_overload(e):
                 raise
@@ -149,8 +204,8 @@ def list_releases_rest(
                 e,
                 _FALLBACK_PER_PAGE,
             )
-        # Fallback at the smaller page size; its errors propagate unwrapped.
-        return _crawl(owner, repo, _FALLBACK_PER_PAGE, headers=headers, client=client)
+        # Fallback at the smaller page size, with per-page retries.
+        return _crawl(owner, repo, _FALLBACK_PER_PAGE, headers=headers, client=client, retries=_PAGE_RETRIES)
 
     return fetch_and_filter(
         effective_cache,
