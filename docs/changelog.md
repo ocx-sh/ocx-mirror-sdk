@@ -5,6 +5,17 @@ For the authoritative changelog, see the
 
 Notable releases:
 
+## v0.4.2 — Robust GraphQL retry (2026-06-11)
+
+- **Fix**: the GraphQL retry added in v0.4.1 only matched a fixed list of error
+  *message* substrings. GitHub's concurrent-load timeout / secondary-rate-limit
+  errors carry no stable `type` and inconsistent wording, so they slipped past
+  the markers. `github.list_releases(..., backend=Backend.GRAPHQL)` now retries
+  any HTTP 200 `errors` batch by default (5 attempts, exponential backoff),
+  opting **out** only when an error carries a permanent `type` (`NOT_FOUND`,
+  `FORBIDDEN`, `UNAUTHORIZED`, `INSUFFICIENT_SCOPES`, `UNPROCESSABLE`), which
+  still raise immediately. Supersedes v0.4.1.
+
 ## v0.4.1 — Transient GraphQL retry (2026-06-11)
 
 - **Fix**: `github.list_releases(..., backend=Backend.GRAPHQL)` now retries
