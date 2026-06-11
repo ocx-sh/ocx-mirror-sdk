@@ -5,6 +5,16 @@ For the authoritative changelog, see the
 
 Notable releases:
 
+## v0.4.1 — Transient GraphQL retry (2026-06-11)
+
+- **Fix**: `github.list_releases(..., backend=Backend.GRAPHQL)` now retries
+  transient GitHub GraphQL failures — the HTTP 200 `errors` array carrying a
+  timeout / "something went wrong while executing your query" message that
+  GitHub returns on asset-heavy repos (python-build-standalone) — up to 4
+  attempts with exponential backoff before raising. Hard errors (`NOT_FOUND`,
+  validation, auth, rate-limit) still raise immediately and non-retryably, so
+  the `ApiResponseError` contract is unchanged.
+
 ## v0.4.0 — GitLab + scoped sources (2026-06-01)
 
 - **Breaking**: top-level `list_releases` and `Backend` removed. Use

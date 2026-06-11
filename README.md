@@ -19,7 +19,7 @@ In a [PEP 723](https://peps.python.org/pep-0723/) inline-metadata script (recomm
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.4.0",
+#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.4.1",
 # ]
 # ///
 
@@ -33,7 +33,7 @@ Or in a project `pyproject.toml`:
 dependencies = ["ocx-mirror-sdk"]
 
 [tool.uv.sources]
-ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.4.0" }
+ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.4.1" }
 ```
 
 `uv.lock` pins to a commit SHA — `uv sync --frozen` is reproducible in CI.
