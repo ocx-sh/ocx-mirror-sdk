@@ -206,15 +206,19 @@ def test_list_releases_paginates_assets_within_release(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_list_releases_raises_api_response_error_on_graphql_errors(monkeypatch):
+def test_list_releases_raises_api_response_error_on_permanent_graphql_error(monkeypatch):
     _set_token(monkeypatch)
     _isolate_module_caches(monkeypatch)
+    delays = _silence_sleep(monkeypatch)
 
     def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"errors": [{"message": "rate limited"}], "data": None})
+        return httpx.Response(200, json={"errors": [{"type": "FORBIDDEN", "message": "no"}], "data": None})
 
     with pytest.raises(ApiResponseError, match="graphql errors"):
         _graphql(client=_client(handler))
+
+    # Permanent error → surfaced immediately, no retries.
+    assert delays == []
 
 
 def _silence_sleep(monkeypatch) -> list[float]:
@@ -224,6 +228,7 @@ def _silence_sleep(monkeypatch) -> list[float]:
     return delays
 
 
+# A server-side timeout / throttle: no stable ``type``, varying message text.
 _TRANSIENT_ERROR = {
     "errors": [
         {
@@ -274,11 +279,11 @@ def test_transient_graphql_error_raises_after_exhausting_retries(monkeypatch):
     with pytest.raises(ApiResponseError, match="graphql errors"):
         _graphql("owner/repo", client=_client(handler))
 
-    # 4 attempts → 3 backoff sleeps before the terminal raise.
-    assert delays == [1.0, 2.0, 4.0]
+    # 5 attempts → 4 backoff sleeps before the terminal raise.
+    assert delays == [1.0, 2.0, 4.0, 8.0]
 
 
-def test_non_transient_graphql_error_does_not_retry(monkeypatch):
+def test_permanent_graphql_error_does_not_retry(monkeypatch):
     _set_token(monkeypatch)
     _isolate_module_caches(monkeypatch)
     delays = _silence_sleep(monkeypatch)
@@ -303,21 +308,20 @@ def test_non_transient_graphql_error_does_not_retry(monkeypatch):
     [
         pytest.param([], False, id="empty"),
         pytest.param("nope", False, id="not-a-list"),
-        pytest.param([{"message": "Something went wrong while executing your query."}], True, id="github-timeout"),
-        pytest.param([{"message": "Connection timed out"}], True, id="timed-out"),
-        pytest.param([{"message": "NOT_FOUND"}], False, id="not-found"),
-        pytest.param([{"message": "rate limited"}], False, id="rate-limited"),
-        pytest.param(
-            [{"message": "Connection timed out"}, {"message": "NOT_FOUND"}],
-            False,
-            id="mixed-transient-and-hard",
-        ),
-        pytest.param([{"type": "FORBIDDEN"}], False, id="no-message"),
-        pytest.param([{"message": 123}], False, id="non-str-message"),
+        # No stable type → treated as retryable regardless of message wording.
+        pytest.param([{"message": "Something went wrong while executing your query."}], True, id="timeout-no-type"),
+        pytest.param([{"message": "was submitted too quickly"}], True, id="rate-limit-no-type"),
+        pytest.param([{"type": "SERVICE_UNAVAILABLE", "message": "x"}], True, id="unknown-type-retryable"),
+        # Permanent types → never retried.
+        pytest.param([{"type": "NOT_FOUND", "message": "x"}], False, id="not-found"),
+        pytest.param([{"type": "FORBIDDEN"}], False, id="forbidden-no-message"),
+        pytest.param([{"type": "not_found"}], False, id="lowercase-type"),
+        # Any permanent error in a mixed batch makes the whole batch non-retryable.
+        pytest.param([{"message": "timed out"}, {"type": "NOT_FOUND"}], False, id="mixed-transient-and-permanent"),
     ],
 )
-def test_is_transient_graphql_errors(errors, expected):
-    assert graphql_module._is_transient_graphql_errors(errors) is expected
+def test_is_retryable_graphql_errors(errors, expected):
+    assert graphql_module._is_retryable_graphql_errors(errors) is expected
 
 
 def test_list_releases_raises_http_status_error_on_5xx(monkeypatch):

@@ -31,23 +31,27 @@ _assets_cache = FileCache("github-graphql-assets", max_age=7 * 86400)
 
 _GRAPHQL_URL = "https://api.github.com/graphql"
 
-# GitHub returns HTTP 200 with an ``errors`` array (not a 5xx) when a GraphQL
-# query times out on its side — common on repos with thousands of release
-# assets (python-build-standalone). These are idempotent reads, so retry the
-# transient subset with exponential backoff before surfacing the failure.
-_MAX_GRAPHQL_ATTEMPTS = 4
+# GitHub returns HTTP 200 with an ``errors`` array (not a 5xx) when a query
+# times out or is throttled on its side — common when several CI jobs crawl the
+# same asset-heavy repo (python-build-standalone) concurrently and trip the
+# secondary rate limit. These are idempotent reads, so retry with exponential
+# backoff before surfacing the failure.
+_MAX_GRAPHQL_ATTEMPTS = 5
 _GRAPHQL_RETRY_BACKOFF_BASE = 1.0  # seconds; sleep = base * 2**attempt
 
-# Substrings (matched case-insensitively against each error ``message``) that
-# mark a GraphQL error as a transient server-side failure safe to retry. Hard
-# errors — NOT_FOUND, validation, auth, rate-limit — are intentionally absent
-# so they surface immediately as a non-retryable ApiResponseError.
-_TRANSIENT_GRAPHQL_MARKERS = (
-    "something went wrong while executing your query",
-    "timeout",
-    "timed out",
-    "temporarily unavailable",
-    "please try again",
+# GraphQL error ``type`` values (upper-cased) that are permanent — a retry can
+# never make them succeed, so they surface immediately. Anything else (a
+# server-side timeout / throttle, which GitHub returns *without* a stable type
+# and with varying message wording) is treated as retryable: we cannot rely on
+# matching the message text, so default to retrying and only opt OUT for these.
+_PERMANENT_GRAPHQL_ERROR_TYPES = frozenset(
+    {
+        "NOT_FOUND",
+        "FORBIDDEN",
+        "UNAUTHORIZED",
+        "INSUFFICIENT_SCOPES",
+        "UNPROCESSABLE",
+    }
 )
 
 # Sleep seam — module attribute so tests can swap it for a no-op
@@ -56,22 +60,21 @@ _TRANSIENT_GRAPHQL_MARKERS = (
 _sleep: Callable[[float], None] = time.sleep
 
 
-def _is_transient_graphql_errors(errors: Any) -> bool:
-    """Return True when every GraphQL error looks like a transient server fault.
+def _is_retryable_graphql_errors(errors: Any) -> bool:
+    """Return True when a GraphQL ``errors`` batch is worth retrying.
 
-    A non-empty ``errors`` list every entry of which carries a message matching
-    :data:`_TRANSIENT_GRAPHQL_MARKERS`. A single non-transient (or untyped /
-    message-less) error makes the whole batch non-retryable — we never want to
-    spin on a genuine NOT_FOUND or query-validation failure.
+    Retryable by default: GitHub signals transient timeouts / secondary
+    rate-limits via the 200 ``errors`` array with no stable ``type`` and
+    inconsistent message wording, so message matching is unreliable. A batch is
+    treated as non-retryable only when *any* error carries a permanent ``type``
+    (:data:`_PERMANENT_GRAPHQL_ERROR_TYPES`) — we never want to spin on a real
+    NOT_FOUND or auth failure.
     """
     if not isinstance(errors, list) or not errors:
         return False
     for err in errors:
-        message = err.get("message", "") if isinstance(err, dict) else ""
-        if not isinstance(message, str):
-            return False
-        lowered = message.lower()
-        if not any(marker in lowered for marker in _TRANSIENT_GRAPHQL_MARKERS):
+        etype = err.get("type") if isinstance(err, dict) else None
+        if isinstance(etype, str) and etype.upper() in _PERMANENT_GRAPHQL_ERROR_TYPES:
             return False
     return True
 
@@ -140,10 +143,10 @@ def _graphql(
         if "errors" in payload:
             errors = payload["errors"]
             is_last = attempt == _MAX_GRAPHQL_ATTEMPTS - 1
-            if _is_transient_graphql_errors(errors) and not is_last:
+            if _is_retryable_graphql_errors(errors) and not is_last:
                 delay = _GRAPHQL_RETRY_BACKOFF_BASE * (2**attempt)
                 log.warning(
-                    "transient graphql error (attempt %d/%d), retrying in %.1fs: %s",
+                    "retryable graphql error (attempt %d/%d), retrying in %.1fs: %s",
                     attempt + 1,
                     _MAX_GRAPHQL_ATTEMPTS,
                     delay,
