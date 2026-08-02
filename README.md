@@ -12,35 +12,29 @@ Python SDK for authoring [`ocx-mirror`](https://github.com/ocx-sh/ocx) generator
 
 ## Install
 
-In a [PEP 723](https://peps.python.org/pep-0723/) inline-metadata script (recommended for one-file generators):
+Published on [PyPI](https://pypi.org/project/ocx-mirror-sdk/). In a
+[PEP 723](https://peps.python.org/pep-0723/) inline-metadata script
+(recommended for one-file generators):
 
 ```python
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
-# dependencies = [
-#   "ocx-mirror-sdk @ git+https://github.com/ocx-sh/ocx-mirror-sdk@v0.5.2",
-# ]
+# dependencies = ["ocx-mirror-sdk~=0.5.2"]
 # ///
 
 from ocx_mirror_sdk import IndexBuilder, github
 ```
 
-Or in a project `pyproject.toml`:
+Or in a project:
 
-```toml
-[project]
-dependencies = ["ocx-mirror-sdk"]
-
-[tool.uv.sources]
-ocx-mirror-sdk = { git = "https://github.com/ocx-sh/ocx-mirror-sdk", tag = "v0.5.2" }
+```bash
+uv add ocx-mirror-sdk
 ```
 
-`uv.lock` pins to a commit SHA — `uv sync --frozen` is reproducible in CI.
-
-Prefer a pre-built wheel (no source build at install time)? Pin the wheel
-asset from the GitHub Release — see the
-[install guide](https://docs.ocx.sh/sdk/mirror/getting-started/install/#pre-built-wheel-alternative).
+Pre-1.0, minor releases may break — `~=` pins the patch series. Git-tag and
+wheel-asset installs remain available; see the
+[install guide](https://docs.ocx.sh/sdk/mirror/getting-started/install/).
 
 ## Quickstart
 

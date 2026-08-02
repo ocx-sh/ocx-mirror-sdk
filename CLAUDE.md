@@ -65,17 +65,16 @@ Optional shell convenience: `eval "$(ocx env --shell=sh)"` once per session, the
 | `task format:check` | check formatting (used by verify) |
 | `task codegen` | Re-fetch JSON Schema + regenerate `_schema.py` |
 | `task schema:fetch` | Just re-fetch the JSON Schema |
+| `task changelog` | Regenerate `CHANGELOG.md` from git history (git-cliff) |
+| `task release:prepare` | Next version via git-cliff + bump + changelog + verify |
 
 ## Distribution
 
-Two install paths, both reproducible via `uv.lock`:
+Published on PyPI as [`ocx-mirror-sdk`](https://pypi.org/project/ocx-mirror-sdk/) — primary install path (`~=X.Y.Z` snippets in README/docs). Git-tag pin and GitHub Release wheel assets remain as alternatives. All reproducible via `uv.lock`.
 
-- **Git tag pin** (`git+https://github.com/ocx-sh/ocx-mirror-sdk@vX.Y.Z`) — primary, used in README examples.
-- **Wheel asset** (`https://github.com/ocx-sh/ocx-mirror-sdk/releases/download/vX.Y.Z/ocx_mirror_sdk-X.Y.Z-py3-none-any.whl`) — pre-built, skips `hatchling` at install time.
+Release flow: `ocx run -- task release:prepare` (interactive menu, or `BUMP=auto|patch|minor|major`, or `VERSION=X.Y.Z`). It computes the next version from conventional commits via git-cliff, bumps `pyproject.toml` (`uv version`) and the `~=` install snippets, regenerates `CHANGELOG.md`, and runs `task verify`. Review, commit `chore(release): vX.Y.Z`, tag, `git push --atomic origin main vX.Y.Z`. `.github/workflows/release.yml` then validates tag ↔ `pyproject.toml`, verifies, builds wheel + sdist via `uv build`, uploads both as Release assets, and publishes to PyPI via Trusted Publishing (OIDC, GitHub `pypi` environment, no stored tokens). `workflow_dispatch` gives branch dry runs — build only, no publish.
 
-PyPI publish deferred until post-v1.0.
-
-Release flow: `ocx run -- task release:prep VERSION=X.Y.Z` bumps `pyproject.toml` + README + docs install snippets. Edit `docs/changelog.md` by hand — rename `## Unreleased` → `## vX.Y.Z — <name>`. Commit, push `vX.Y.Z` tag. `.github/workflows/release.yml` validates tag ↔ `pyproject.toml` coherence, builds the wheel + sdist via `uv build`, uploads both as Release assets. `workflow_dispatch` enables branch dry runs.
+`CHANGELOG.md` is git-cliff-generated (`cliff.toml`) — never edit it by hand. `docs/changelog.md` embeds it into the docs site via `include-markdown`.
 
 ## Stability
 
