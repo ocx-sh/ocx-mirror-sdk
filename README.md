@@ -8,7 +8,7 @@ Python SDK for authoring [`ocx-mirror`](https://github.com/ocx-sh/ocx) generator
 
 `ocx-mirror` is OCX's tool for ingesting upstream tool releases (e.g. CPython, Bun, shellcheck) and republishing them as OCI artifacts. When upstream releases live somewhere `ocx-mirror` cannot crawl directly, a small Python *generator* emits a `url_index` JSON document. This SDK provides the typed building blocks for those generators.
 
-📖 **Full documentation: <https://docs.ocx.sh/sdk/mirror/>**
+📖 **Full documentation: <https://ocx-sh.github.io/ocx-mirror-sdk/>**
 
 ## Install
 
@@ -34,7 +34,7 @@ uv add ocx-mirror-sdk
 
 Pre-1.0, minor releases may break — `~=` pins the patch series. Git-tag and
 wheel-asset installs remain available; see the
-[install guide](https://docs.ocx.sh/sdk/mirror/getting-started/install/).
+[install guide](https://ocx-sh.github.io/ocx-mirror-sdk/getting-started/install/).
 
 ## Quickstart
 
@@ -69,7 +69,7 @@ from ocx_mirror_sdk import gitlab
 releases = gitlab.list_releases("gitlab-org/gitlab-runner")
 ```
 
-More worked examples live under [`examples/`](examples/) and at <https://docs.ocx.sh/sdk/mirror/recipes/>.
+More worked examples live under [`examples/`](examples/) and at <https://ocx-sh.github.io/ocx-mirror-sdk/recipes/>.
 
 ## Public API
 

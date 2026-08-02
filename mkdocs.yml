@@ -2,7 +2,7 @@
 
 site_name: ocx-mirror-sdk
 site_description: Python SDK for authoring ocx-mirror generator scripts.
-site_url: https://docs.ocx.sh/sdk/mirror/
+site_url: https://ocx-sh.github.io/ocx-mirror-sdk/
 site_author: The OCX Authors
 repo_name: ocx-sh/ocx-mirror-sdk
 repo_url: https://github.com/ocx-sh/ocx-mirror-sdk
