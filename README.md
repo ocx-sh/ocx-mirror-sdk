@@ -20,7 +20,7 @@ Published on [PyPI](https://pypi.org/project/ocx-mirror-sdk/). In a
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["ocx-mirror-sdk~=0.5.2"]
+# dependencies = ["ocx-mirror-sdk~=0.6.0"]
 # ///
 
 from ocx_mirror_sdk import IndexBuilder, github
